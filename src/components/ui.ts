@@ -24,19 +24,24 @@ const mapOverlay = document.querySelector("#map-overlay");
 // 타임라인 표시/숨김 함수
 export function showTimeline() {
   if (timelineContainer) {
-    timelineContainer.style.display = "block";
+    timelineContainer.classList.remove("hidden");
 
     setTimeout(() => {
-      timelineContainer.classList.add("visible");
+      timelineContainer.classList.add("translate-x-0");
+      timelineContainer.classList.remove("translate-x-full");
 
       if (window.innerWidth > 768) {
-        // 데스크톱 뷰
-        mapContainer?.classList.add("map-container-shifted");
+        // 데스크톱 뷰에서 지도 영역 조정
+        if (mapContainer) {
+          mapContainer.classList.add("pr-80");
+        }
         adjustInterfaceForTimeline(true);
-        window.dispatchEvent(new Event("resize")); // 지도 다시 그리기
+        window.dispatchEvent(new Event("resize")); // 지도 리사이즈 트리거
       } else {
-        // 모바일 뷰
-        mapOverlay?.classList.add("visible");
+        // 모바일 뷰에서 오버레이 표시
+        if (mapOverlay) {
+          mapOverlay.classList.remove("hidden");
+        }
       }
     }, 10);
   }
@@ -44,13 +49,21 @@ export function showTimeline() {
 
 export function hideTimeline() {
   if (timelineContainer) {
-    timelineContainer.classList.remove("visible");
-    mapContainer?.classList.remove("map-container-shifted");
-    mapOverlay?.classList.remove("visible");
+    timelineContainer.classList.add("translate-x-full");
+    timelineContainer.classList.remove("translate-x-0");
+
+    if (mapContainer) {
+      mapContainer.classList.remove("pr-80");
+    }
+
+    if (mapOverlay) {
+      mapOverlay.classList.add("hidden");
+    }
+
     adjustInterfaceForTimeline(false);
 
     setTimeout(() => {
-      timelineContainer.style.display = "none";
+      timelineContainer.classList.add("hidden");
       window.dispatchEvent(new Event("resize"));
     }, 300);
   }
@@ -99,35 +112,55 @@ export function createLocationCards() {
 
   popUps.forEach((location, index) => {
     const card = document.createElement("div");
-    card.className = "location-card day-planner-card";
-    if (index === 0) card.classList.add("card-active");
+    card.className =
+      "flex-none w-[280px] bg-white rounded-xl overflow-hidden shadow-card transition-all duration-300 transform scale-95 hover:shadow-card-hover hover:-translate-y-0.5";
+    if (index === 0)
+      card.classList.add("scale-100", "shadow-card-active", "hover:scale-100");
 
     const imageUrl = getPlaceholderImage(location.name);
-    let cardContent = `<div class="card-image" style="background-image: url('${imageUrl}')"></div>`;
+
+    let cardContent = `
+      <div class="relative">
+        <div class="w-full h-36 bg-cover bg-center rounded-t-lg" style="background-image: url('${imageUrl}')">
+          <div class="absolute inset-0 bg-black/20 rounded-t-lg"></div>
+        </div>`;
 
     if (location.sequence) {
-      cardContent += `<div class="card-sequence-badge">${location.sequence}</div>`;
+      cardContent += `
+        <div class="absolute top-2 left-2 bg-white text-black font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-md">
+          ${location.sequence}
+        </div>`;
     }
+
     if (location.time) {
-      cardContent += `<div class="card-time-badge">${location.time}</div>`;
+      cardContent += `
+        <div class="absolute top-2 right-2 bg-white text-primary text-xs px-2 py-1 rounded-full shadow-md">
+          <i class="fas fa-clock mr-1"></i>${location.time}
+        </div>`;
     }
 
     cardContent += `
-      <div class="card-content">
-        <h3 class="card-title">${location.name}</h3>
-        <p class="card-description">${location.description}</p>
+      </div>
+      <div class="p-3">
+        <h3 class="font-bold text-base truncate">${location.name}</h3>
+        <p class="text-sm text-gray-600 line-clamp-2 h-10 overflow-hidden">${
+          location.description
+        }</p>
         ${
           location.duration
-            ? `<div class="card-duration">${location.duration}</div>`
+            ? `<div class="mt-2 text-xs text-gray-500">
+                <i class="fas fa-hourglass-half mr-1"></i>${location.duration}
+               </div>`
             : ""
         }
-        <div class="card-coordinates">
+        <div class="mt-1 text-xs text-gray-400">
           ${location.position.lat().toFixed(5)}, ${location.position
       .lng()
       .toFixed(5)}
         </div>
       </div>
     `;
+
     card.innerHTML = cardContent;
 
     card.addEventListener("click", () => {
@@ -139,8 +172,15 @@ export function createLocationCards() {
     cardContainer.appendChild(card);
 
     const dot = document.createElement("div");
-    dot.className = "carousel-dot";
-    if (index === 0) dot.classList.add("active");
+    dot.className =
+      "w-2 h-2 rounded-full bg-white/50 mx-1 transition-all duration-300 cursor-pointer";
+    if (index === 0) dot.classList.add("bg-white", "scale-110");
+
+    dot.addEventListener("click", () => {
+      highlightCard(index);
+      map.panTo(location.position);
+    });
+
     carouselIndicators.appendChild(dot);
   });
 
@@ -154,12 +194,21 @@ export function highlightCard(index: number) {
   const { popUps, map } = getMapsData();
 
   activeCardIndex = index;
-  const cards = cardContainer?.querySelectorAll(".location-card");
+  const cards = cardContainer?.querySelectorAll(".flex-none");
   if (!cards) return;
 
-  cards.forEach((card) => card.classList.remove("card-active"));
+  cards.forEach((card) => {
+    card.classList.remove("scale-100", "shadow-card-active", "hover:scale-100");
+    card.classList.add("scale-95", "hover:scale-95");
+  });
+
   if (cards[index]) {
-    cards[index].classList.add("card-active");
+    cards[index].classList.remove("scale-95", "hover:scale-95");
+    cards[index].classList.add(
+      "scale-100",
+      "shadow-card-active",
+      "hover:scale-100"
+    );
     const cardWidth = (cards[index] as HTMLElement).offsetWidth;
     const containerWidth = cardContainer.offsetWidth;
     const scrollPosition =
@@ -169,9 +218,16 @@ export function highlightCard(index: number) {
     cardContainer.scrollTo({ left: scrollPosition, behavior: "smooth" });
   }
 
-  const dots = carouselIndicators?.querySelectorAll(".carousel-dot");
+  const dots = carouselIndicators?.querySelectorAll(".rounded-full");
   if (dots) {
-    dots.forEach((dot, i) => dot.classList.toggle("active", i === index));
+    dots.forEach((dot) => {
+      dot.classList.remove("bg-white", "scale-110");
+      dot.classList.add("bg-white/50");
+    });
+    if (dots[index]) {
+      dots[index].classList.remove("bg-white/50");
+      dots[index].classList.add("bg-white", "scale-110");
+    }
   }
 
   popUps.forEach((popup, i) => {
@@ -189,16 +245,14 @@ export function highlightTimelineItem(cardIndex: number) {
   const { popUps } = getMapsData();
 
   if (!timeline) return;
-  const timelineItems = timeline.querySelectorAll(
-    ".timeline-content:not(.transport)"
-  );
-  timelineItems.forEach((item) => item.classList.remove("active"));
+  const timelineContents = timeline.querySelectorAll(".flex-1");
+  timelineContents.forEach((item) => item.classList.remove("bg-primary/5"));
 
   const location = popUps[cardIndex];
-  for (const item of timelineItems) {
-    const title = item.querySelector(".timeline-title");
+  for (const item of timelineContents) {
+    const title = item.querySelector(".font-semibold");
     if (title && title.textContent === location.name) {
-      item.classList.add("active");
+      item.classList.add("bg-primary/5");
       item.scrollIntoView({ behavior: "smooth", block: "nearest" });
       break;
     }
@@ -265,27 +319,29 @@ export function createTimeline() {
 
   dayPlanItinerary.forEach((item, index) => {
     const timelineItem = document.createElement("div");
-    timelineItem.className = "timeline-item";
-    const timeDisplay = item.time || "Flexible";
+    timelineItem.className = "flex mb-3 relative";
+    const timeDisplay = item.time || "유동적";
 
     timelineItem.innerHTML = `
-      <div class="timeline-time">${timeDisplay}</div>
-      <div class="timeline-connector">
-        <div class="timeline-dot"></div>
-        <div class="timeline-line"></div>
+      <div class="w-[60px] text-primary font-medium text-sm">${timeDisplay}</div>
+      <div class="flex flex-col items-center mx-2.5">
+        <div class="w-3 h-3 rounded-full bg-primary mt-1"></div>
+        <div class="flex-1 w-0.5 bg-gray-200"></div>
       </div>
-      <div class="timeline-content" data-index="${index}">
-        <div class="timeline-title">${item.name}</div>
-        <div class="timeline-description">${item.description}</div>
+      <div class="flex-1 px-2 pb-3.5 rounded-md data-index="${index}" hover:bg-primary/5">
+        <div class="font-semibold mb-1">${item.name}</div>
+        <div class="text-sm leading-tight text-gray-600 mb-1.5">${
+          item.description
+        }</div>
         ${
           item.duration
-            ? `<div class="timeline-duration">${item.duration}</div>`
+            ? `<div class="text-xs text-gray-500">${item.duration}</div>`
             : ""
         }
       </div>
     `;
 
-    const timelineContent = timelineItem.querySelector(".timeline-content");
+    const timelineContent = timelineItem.querySelector(".flex-1");
     if (timelineContent) {
       timelineContent.addEventListener("click", () => {
         const { popUps, map } = getMapsData();
@@ -300,7 +356,7 @@ export function createTimeline() {
   });
 
   if (lines.length > 0) {
-    const timelineItems = timeline.querySelectorAll(".timeline-item");
+    const timelineItems = timeline.querySelectorAll(".flex.mb-3");
     for (let i = 0; i < timelineItems.length - 1; i++) {
       const currentItem = dayPlanItinerary[i];
       const nextItem = dayPlanItinerary[i + 1];
@@ -315,24 +371,26 @@ export function createTimeline() {
         (connectingLine.transport || connectingLine.travelTime)
       ) {
         const transportItem = document.createElement("div");
-        transportItem.className = "timeline-item transport-item";
+        transportItem.className = "flex mb-3 relative";
         transportItem.innerHTML = `
-          <div class="timeline-time"></div>
-          <div class="timeline-connector">
-            <div class="timeline-dot" style="background-color: #999;"></div>
-            <div class="timeline-line"></div>
+          <div class="w-[60px]"></div>
+          <div class="flex flex-col items-center mx-2.5">
+            <div class="w-3 h-3 rounded-full bg-gray-500 mt-1"></div>
+            <div class="flex-1 w-0.5 bg-gray-200"></div>
           </div>
-          <div class="timeline-content transport">
-            <div class="timeline-title">
+          <div class="flex-1 px-2 pb-3.5 rounded-md">
+            <div class="font-semibold mb-1">
               <i class="fas fa-${getTransportIcon(
                 connectingLine.transport || "travel"
               )}"></i>
               ${connectingLine.transport || "Travel"}
             </div>
-            <div class="timeline-description">${connectingLine.name}</div>
+            <div class="text-sm leading-tight text-gray-600 mb-1.5">${
+              connectingLine.name
+            }</div>
             ${
               connectingLine.travelTime
-                ? `<div class="timeline-duration">${connectingLine.travelTime}</div>`
+                ? `<div class="text-xs text-gray-500">${connectingLine.travelTime}</div>`
                 : ""
             }
           </div>
