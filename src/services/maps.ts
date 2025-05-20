@@ -25,7 +25,7 @@ export async function initMap(mapElement: HTMLElement) {
   bounds = new LatLngBounds();
 
   map = new Map(mapElement, {
-    center: { lat: -34.397, lng: 150.644 },
+    // center: { lat: -34.397, lng: 150.644 },
     zoom: 8,
     mapId: "4504f8b37365c3d0",
     gestureHandling: "greedy",

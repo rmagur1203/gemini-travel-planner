@@ -20,6 +20,128 @@
         },
       };
     </script>
+    <style>
+      /* 위치 카드 스타일 */
+      .location-card {
+        flex: 0 0 auto;
+        width: 280px;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        transform: scale(0.95);
+      }
+      .location-card:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px) scale(0.95);
+      }
+      .card-active {
+        transform: scale(1);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      }
+      .card-active:hover {
+        transform: translateY(-2px) scale(1);
+      }
+
+      /* 캐러셀 인디케이터 스타일 */
+      .carousel-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.5);
+        margin: 0 4px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+      .carousel-dot.active {
+        background-color: white;
+        transform: scale(1.2);
+      }
+
+      /* 타임라인 스타일 */
+      .timeline-item {
+        display: flex;
+        margin-bottom: 12px;
+        position: relative;
+      }
+      .timeline-time {
+        width: 60px;
+        color: #2196f3;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .timeline-connector {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 10px;
+      }
+      .timeline-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #2196f3;
+        margin-top: 4px;
+      }
+      .timeline-line {
+        flex: 1;
+        width: 2px;
+        background-color: #e0e0e0;
+      }
+      .timeline-content {
+        flex: 1;
+        padding: 0 8px 15px 8px;
+        border-radius: 6px;
+      }
+      .timeline-content.active {
+        background-color: rgba(33, 150, 243, 0.05);
+      }
+      .timeline-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .timeline-description {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #666;
+        margin-bottom: 6px;
+      }
+      .timeline-duration {
+        font-size: 12px;
+        color: #888;
+      }
+
+      /* 스크롤바 숨기기 */
+      #card-container {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE and Edge */
+      }
+      #card-container::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+      }
+
+      /* 로딩 스피너 */
+      @keyframes spinner-spin {
+        0% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+        100% {
+          transform: translate(-50%, -50%) rotate(360deg);
+        }
+      }
+      #spinner {
+        animation: spinner-spin 0.8s linear infinite;
+      }
+
+      /* 버튼 로딩 상태 */
+      button.loading .fa-arrow-right {
+        opacity: 0;
+      }
+      button.loading .spinner {
+        opacity: 1;
+      }
+    </style>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -33,7 +155,7 @@
     </script>
   </head>
   <body class="m-0 p-0 h-full font-sans">
-    <!-- 지도와 관련 UI 요소를 위한 메인 컨테이너 -->
+    <!-- 지도와 UI 요소를 위한 메인 컨테이너 -->
     <div
       id="map-container"
       class="absolute top-0 left-0 h-full w-full transition-all duration-300 overflow-hidden"
@@ -72,7 +194,7 @@
         class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300"
       >
         <div
-          class="flex overflow-x-auto scroll-smooth py-3 px-3 rounded-2xl backdrop-blur-sm bg-white/5 border border-white/10 relative"
+          class="flex overflow-x-auto scroll-smooth gap-4 py-4 px-4 rounded-2xl backdrop-blur-sm bg-white/10 border border-white/20 relative"
           id="card-container"
         >
           <!-- 위치 카드는 스크립트에 의해 동적으로 삽입됩니다 -->
@@ -149,8 +271,6 @@
       id="spinner"
       class="hidden fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50px] h-[50px] border-[5px] border-black/10 border-t-[#3498db] rounded-full animate-spin transition-opacity"
     ></div>
-
-    <!-- map-container 내부 요소 끝 -->
 
     <!-- Google Maps JavaScript API 스크립트 -->
     <script>

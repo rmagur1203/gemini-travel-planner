@@ -35,153 +35,91 @@ const nextCardButton = document.querySelector(
 const closeTimelineButton = document.querySelector(
   "#close-timeline"
 ) as HTMLButtonElement;
-const exportPlanButton = document.querySelector(
+const exportButton = document.querySelector(
   "#export-plan"
 ) as HTMLButtonElement;
-const timelineToggle = document.querySelector("#timeline-toggle");
-const mapOverlay = document.querySelector("#map-overlay");
-const spinner = document.querySelector("#spinner");
-const errorMessage = document.querySelector("#error-message");
+const timelineOverlay = document.querySelector("#map-overlay");
+const promptInput = document.querySelector(
+  "#prompt-input"
+) as HTMLTextAreaElement;
+const spinner = document.querySelector("#spinner") as HTMLDivElement;
+const errorMessageElement = document.querySelector(
+  "#error-message"
+) as HTMLDivElement;
 
-// 초기화
-(async () => {
-  await initMap(document.getElementById("map")!);
-  setupEventListeners();
-})();
+// Event Listeners
+generateButton?.addEventListener("click", () => {
+  const prompt = promptInput?.value.trim();
+  if (!prompt) return;
+  generateResults(prompt);
+});
 
-// 이벤트 리스너 설정
-function setupEventListeners() {
-  const promptInput = document.querySelector(
-    "#prompt-input"
-  ) as HTMLTextAreaElement;
-
-  promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.code === "Enter" && !e.shiftKey) {
-      const buttonEl = document.getElementById("generate") as HTMLButtonElement;
-      buttonEl.classList.add("loading");
-      e.preventDefault();
-      e.stopPropagation();
-
-      setTimeout(() => {
-        sendText(promptInput.value);
-        promptInput.value = "";
-      }, 10);
-    }
-  });
-
-  generateButton?.addEventListener("click", (e) => {
-    const buttonEl = e.currentTarget as HTMLButtonElement;
-    buttonEl.classList.add("loading");
-
-    setTimeout(() => {
-      sendText(
-        (document.querySelector("#prompt-input") as HTMLTextAreaElement).value
-      );
-    }, 10);
-  });
-
-  resetButton?.addEventListener("click", () => {
-    restart();
-  });
-
-  if (prevCardButton) {
-    prevCardButton.addEventListener("click", () => {
-      navigateCards(-1);
-    });
+promptInput?.addEventListener("keydown", (e) => {
+  if (e.code === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const prompt = promptInput.value.trim();
+    if (!prompt) return;
+    generateResults(prompt);
   }
+});
 
-  if (nextCardButton) {
-    nextCardButton.addEventListener("click", () => {
-      navigateCards(1);
-    });
-  }
+resetButton?.addEventListener("click", () => resetInterface());
+closeTimelineButton?.addEventListener("click", hideTimeline);
+exportButton?.addEventListener("click", exportDayPlan);
+timelineOverlay?.addEventListener("click", hideTimeline);
 
-  if (closeTimelineButton) {
-    closeTimelineButton.addEventListener("click", () => {
-      hideTimeline();
-    });
-  }
+prevCardButton?.addEventListener("click", () => navigateCards(-1));
+nextCardButton?.addEventListener("click", () => navigateCards(1));
 
-  if (timelineToggle) {
-    timelineToggle.addEventListener("click", () => {
-      showTimeline();
-    });
-  }
-
-  if (mapOverlay) {
-    mapOverlay.addEventListener("click", () => {
-      hideTimeline();
-    });
-  }
-
-  if (exportPlanButton) {
-    exportPlanButton.addEventListener("click", () => {
-      exportDayPlan();
-    });
+// Initialize Map
+async function initInterface() {
+  try {
+    await initMap(document.getElementById("map") as HTMLElement);
+  } catch (e) {
+    console.error("Error initializing Google Maps:", e);
+    errorMessageElement.textContent =
+      "Google Maps를 초기화하는 데 실패했습니다.";
   }
 }
 
-// 재시작 함수
-function restart() {
-  clearDayPlanItinerary();
-  resetMap();
-
-  // UI 요소 초기화
-  const cardContainer = document.querySelector("#card-container");
-  const carouselIndicators = document.querySelector("#carousel-indicators");
-  const cardCarousel = document.querySelector("#card-container")?.parentElement;
-  const timeline = document.querySelector("#timeline");
-
-  if (cardContainer) cardContainer.innerHTML = "";
-  if (carouselIndicators) carouselIndicators.innerHTML = "";
-  if (cardCarousel) (cardCarousel as HTMLElement).style.display = "none";
-  if (timeline) timeline.innerHTML = "";
-
-  hideTimeline();
-}
-
-// AI에게 텍스트 전송
-async function sendText(prompt: string) {
-  if (spinner) spinner.classList.remove("hidden");
-  if (errorMessage) errorMessage.innerHTML = "";
-
-  restart();
-  const buttonEl = document.getElementById("generate") as HTMLButtonElement;
+// Generate Map Results
+async function generateResults(prompt: string) {
+  if (!prompt) return;
 
   try {
-    const ai = initializeAI();
-    const response = await generateContentStream(prompt, ai);
+    resetInterface(false);
+    setLoading(true);
 
-    let text = "";
+    // 프롬프트에 Day Planner 모드 실행 힌트 추가
+    const plannerPrompt =
+      prompt.toLowerCase().includes("일일") ||
+      prompt.toLowerCase().includes("day")
+        ? prompt
+        : `일일 여행 계획: ${prompt}`;
+
+    // Google Gemini 모델 및 생성 옵션 설정
+    const ai = initializeAI();
+    const response = await generateContentStream(plannerPrompt, ai);
+
     let results = false;
 
     for await (const chunk of response) {
       const fns = chunk.functionCalls ?? [];
       for (const fn of fns) {
         if (fn.name === "location") {
+          // 위치 핀 추가 및 일일 계획 데이터에 추가
           const locationInfo = await setPin(fn.args);
-          if (locationInfo.time) {
+          if (locationInfo) {
             addToDayPlanItinerary(locationInfo);
+            results = true;
           }
-          results = true;
         }
+
         if (fn.name === "line") {
+          // 위치 간 이동 경로 추가
           await setLeg(fn.args);
           results = true;
         }
-      }
-
-      if (
-        chunk.candidates &&
-        chunk.candidates.length > 0 &&
-        chunk.candidates[0].content &&
-        chunk.candidates[0].content.parts
-      ) {
-        chunk.candidates[0].content.parts.forEach((part) => {
-          if (part.text) text += part.text;
-        });
-      } else if (chunk.text) {
-        text += chunk.text;
       }
     }
 
@@ -191,20 +129,70 @@ async function sendText(prompt: string) {
       );
     }
 
-    const { dayPlanItinerary } = getMapsData();
-    if (dayPlanItinerary && dayPlanItinerary.length > 0) {
-      sortDayPlanItinerary();
-      createTimeline();
-      showTimeline();
-    }
-
+    // 생성된 데이터 기반으로 UI 구성요소 생성
+    sortDayPlanItinerary();
     createLocationCards();
+    createTimeline();
+    showTimeline();
   } catch (e: any) {
-    if (errorMessage) errorMessage.innerHTML = e.message;
+    errorMessageElement.textContent = e.message || "오류가 발생했습니다";
     console.error("콘텐츠 생성 오류:", e);
   } finally {
-    buttonEl.classList.remove("loading");
+    setLoading(false);
+    promptInput.value = "";
+  }
+}
+
+// Reset Interface
+function resetInterface(clearPrompt = true) {
+  // 맵 및 데이터 초기화
+  resetMap();
+  clearDayPlanItinerary();
+
+  // UI 요소 초기화
+  if (clearPrompt && promptInput) promptInput.value = "";
+  errorMessageElement.textContent = "";
+  hideTimeline();
+
+  const cardCarousel = document.querySelector("#card-container")?.parentElement;
+  if (cardCarousel) {
+    cardCarousel.style.display = "none";
+  }
+}
+
+// Loading State Management
+function setLoading(isLoading: boolean) {
+  const generateButtonSpinner = generateButton?.querySelector(
+    ".spinner"
+  ) as HTMLElement;
+  const generateButtonIcon = generateButton?.querySelector(
+    ".fa-arrow-right"
+  ) as HTMLElement;
+
+  if (generateButton) {
+    generateButton.classList.toggle("loading", isLoading);
   }
 
-  if (spinner) spinner.classList.add("hidden");
+  if (generateButtonSpinner) {
+    generateButtonSpinner.style.opacity = isLoading ? "1" : "0";
+  }
+
+  if (generateButtonIcon) {
+    generateButtonIcon.style.opacity = isLoading ? "0" : "1";
+  }
+
+  if (spinner) {
+    spinner.style.display = isLoading ? "block" : "none";
+  }
+
+  if (promptInput) {
+    promptInput.disabled = isLoading;
+  }
+
+  if (generateButton) {
+    (generateButton as HTMLButtonElement).disabled = isLoading;
+  }
 }
+
+// Initialize App
+initInterface();
