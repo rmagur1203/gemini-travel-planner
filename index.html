@@ -4,8 +4,193 @@
     <title>여행 일정 계획</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#2196F3",
+            },
+            boxShadow: {
+              card: "0 4px 12px rgba(0, 0, 0, 0.1)",
+              "card-hover": "0 6px 16px rgba(0, 0, 0, 0.14)",
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^0.7.0"
+        }
+      }
+    </script>
   </head>
-  <body>
-    <script src="index.tsx" type="module"></script>
+  <body class="m-0 p-0 h-full font-sans">
+    <!-- 지도와 관련 UI 요소를 위한 메인 컨테이너 -->
+    <div
+      id="map-container"
+      class="absolute top-0 left-0 h-full w-full transition-all duration-300 overflow-hidden"
+    >
+      <div id="map" class="h-full w-full"></div>
+
+      <!-- 상단에 위치한 검색 요소를 위한 컨테이너 -->
+      <div
+        class="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]"
+      >
+        <div
+          class="flex items-center bg-white rounded-3xl px-4 py-2 shadow-md transition-shadow hover:shadow-lg"
+        >
+          <i class="fas fa-search text-gray-500 mr-3"></i>
+          <textarea
+            id="prompt-input"
+            placeholder="어디로 여행할 계획인가요? (예: '파리 하루 여행' 또는 '제주도 일일 계획')"
+            class="flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent"
+          ></textarea>
+          <button
+            id="generate"
+            class="bg-[#282828] text-white border-none rounded-full w-8 h-8 flex items-center justify-center cursor-pointer ml-3 transition-colors relative hover:bg-[#282828]"
+          >
+            <i class="fas fa-arrow-right transition-opacity"></i>
+            <div
+              class="spinner absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white opacity-0 pointer-events-none transition-opacity"
+            ></div>
+          </button>
+        </div>
+
+        <div class="text-red-500" id="error-message"></div>
+      </div>
+
+      <!-- 하단에 위치한 위치 카드를 표시하기 위한 캐러셀 -->
+      <div
+        class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300"
+      >
+        <div
+          class="flex overflow-x-auto scroll-smooth py-3 px-3 rounded-2xl backdrop-blur-sm bg-white/5 border border-white/10 relative"
+          id="card-container"
+        >
+          <!-- 위치 카드는 스크립트에 의해 동적으로 삽입됩니다 -->
+        </div>
+        <div class="flex justify-center items-center mt-4">
+          <button
+            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all hover:bg-[#F7F7F7] hover:shadow-md"
+            id="prev-card"
+          >
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <div class="flex mx-4" id="carousel-indicators">
+            <!-- 인디케이터 점은 동적으로 추가됩니다 -->
+          </div>
+          <button
+            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all hover:bg-[#F7F7F7] hover:shadow-md"
+            id="next-card"
+          >
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 지도 초기화 및 현재 결과를 지우는 버튼 -->
+      <button
+        id="reset"
+        class="absolute bottom-8 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-md transition-all hover:bg-[#F7F7F7] hover:shadow-lg"
+      >
+        <i class="fas fa-undo"></i>
+      </button>
+    </div>
+
+    <!-- 모바일에서 타임라인이 열릴 때 표시되는 반투명 오버레이 -->
+    <div class="fixed inset-0 bg-black/50 z-[9] hidden" id="map-overlay"></div>
+
+    <!-- 일정 타임라인을 표시하기 위한 슬라이딩 패널 -->
+    <div
+      class="fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-md shadow-lg z-[1000] overflow-hidden hidden transition-transform duration-300"
+      id="timeline-container"
+    >
+      <!-- 모바일에서 타임라인 가시성을 토글하는 버튼 -->
+      <button
+        id="timeline-toggle"
+        class="absolute top-1/2 -translate-y-1/2 -left-10 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-md border border-r-0 hidden"
+      >
+        <i class="fas fa-calendar-alt"></i>
+      </button>
+
+      <div
+        class="p-4 flex justify-between items-center border-b border-gray-200 sticky top-0 bg-white z-[2]"
+      >
+        <h3 class="text-base font-semibold text-gray-800">일일 여행 계획</h3>
+        <div class="flex gap-2">
+          <button
+            id="export-plan"
+            class="bg-transparent border-none cursor-pointer text-sm text-gray-600 flex items-center p-1 px-2 rounded transition-colors hover:bg-gray-100 hover:text-gray-800"
+          >
+            <i class="fas fa-download"></i> 내보내기
+          </button>
+          <button
+            id="close-timeline"
+            class="bg-transparent border-none cursor-pointer text-sm text-gray-600 flex items-center p-1 px-2 rounded transition-colors hover:bg-gray-100 hover:text-gray-800"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <div class="px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]" id="timeline">
+        <!-- 일정 계획을 나타내는 타임라인 항목들이 여기에 삽입됩니다 -->
+      </div>
+    </div>
+
+    <div
+      id="spinner"
+      class="hidden fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50px] h-[50px] border-[5px] border-black/10 border-t-[#3498db] rounded-full animate-spin transition-opacity"
+    ></div>
+
+    <!-- map-container 내부 요소 끝 -->
+
+    <!-- Google Maps JavaScript API 스크립트 -->
+    <script>
+      // 구글 맵스 자바스크립트 API를 비동기적으로 로드하는 스크립트.
+      ((g) => {
+        var h,
+          a,
+          k,
+          p = "The Google Maps JavaScript API",
+          c = "google",
+          l = "importLibrary",
+          q = "__ib__",
+          m = document,
+          b = window;
+        b = b[c] || (b[c] = {});
+        var d = b.maps || (b.maps = {}),
+          r = new Set(),
+          e = new URLSearchParams(),
+          u = () =>
+            h ||
+            (h = new Promise(async (f, n) => {
+              await (a = m.createElement("script"));
+              e.set("libraries", [...r] + "");
+              for (k in g)
+                e.set(
+                  k.replace(/[A-Z]/g, (t) => "_" + t[0].toLowerCase()),
+                  g[k]
+                );
+              e.set("callback", c + ".maps." + q);
+              a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+              d[q] = f;
+              a.onerror = () => (h = n(Error(p + " could not load.")));
+              a.nonce = m.querySelector("script[nonce]")?.nonce || "";
+              m.head.append(a);
+            }));
+        d[l]
+          ? console.warn(p + " only loads once. Ignoring:", g)
+          : (d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)));
+      })({ key: "AIzaSyBoJ_PjvWy-mAvldANHZGaqXQCWS6JW67w", v: "weekly" });
+    </script>
+    <script src="src/index.tsx" type="module"></script>
   </body>
 </html>
