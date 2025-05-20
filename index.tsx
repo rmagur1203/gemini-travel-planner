@@ -124,6 +124,379 @@ async function initMap() {
 // Initialize the map as soon as the script loads.
 initMap();
 
+// 애플리케이션 UI 생성 함수
+function createAppUI() {
+  // Google Maps API 로드
+  const loadGoogleMapsApi = () => {
+    const g = { key: "AIzaSyBoJ_PjvWy-mAvldANHZGaqXQCWS6JW67w", v: "weekly" };
+    var h,
+      a,
+      k,
+      p = "The Google Maps JavaScript API",
+      c = "google",
+      l = "importLibrary",
+      q = "__ib__",
+      m = document,
+      b = window;
+    b = b[c] || (b[c] = {});
+    var d = b.maps || (b.maps = {}),
+      r = new Set(),
+      e = new URLSearchParams(),
+      u = () =>
+        h ||
+        (h = new Promise(async (f, n) => {
+          await (a = m.createElement("script"));
+          e.set("libraries", [...r] + "");
+          for (k in g)
+            e.set(
+              k.replace(/[A-Z]/g, (t) => "_" + t[0].toLowerCase()),
+              g[k]
+            );
+          e.set("callback", c + ".maps." + q);
+          a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+          d[q] = f;
+          a.onerror = () => (h = n(Error(p + " could not load.")));
+          a.nonce = m.querySelector("script[nonce]")?.nonce || "";
+          m.head.append(a);
+        }));
+    d[l]
+      ? console.warn(p + " only loads once. Ignoring:", g)
+      : (d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)));
+  };
+
+  loadGoogleMapsApi();
+
+  // 메인 컨테이너와 지도
+  const mapContainer = document.createElement("div");
+  mapContainer.id = "map-container";
+  mapContainer.className =
+    "absolute top-0 left-0 h-full w-full transition-all duration-300 overflow-hidden";
+
+  const mapDiv = document.createElement("div");
+  mapDiv.id = "map";
+  mapDiv.className = "h-full w-full";
+  mapContainer.appendChild(mapDiv);
+
+  // 상단 검색 요소 컨테이너
+  const searchContainer = document.createElement("div");
+  searchContainer.className =
+    "absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]";
+
+  const searchBox = document.createElement("div");
+  searchBox.className =
+    "flex items-center bg-white rounded-3xl px-4 py-2 shadow-md transition-shadow hover:shadow-lg";
+
+  const searchIcon = document.createElement("i");
+  searchIcon.className = "fas fa-search text-gray-500 mr-3";
+
+  const promptInput = document.createElement("textarea");
+  promptInput.id = "prompt-input";
+  promptInput.placeholder =
+    "어디로 여행할 계획인가요? (예: '파리 하루 여행' 또는 '제주도 일일 계획')";
+  promptInput.className =
+    "flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent";
+
+  const generateButton = document.createElement("button");
+  generateButton.id = "generate";
+  generateButton.className =
+    "bg-[#282828] text-white border-none rounded-full w-8 h-8 flex items-center justify-center cursor-pointer ml-3 transition-colors relative hover:bg-[#282828]";
+
+  const arrowIcon = document.createElement("i");
+  arrowIcon.className = "fas fa-arrow-right transition-opacity";
+
+  const spinner = document.createElement("div");
+  spinner.className =
+    "spinner absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white opacity-0 pointer-events-none transition-opacity";
+
+  generateButton.appendChild(arrowIcon);
+  generateButton.appendChild(spinner);
+
+  searchBox.appendChild(searchIcon);
+  searchBox.appendChild(promptInput);
+  searchBox.appendChild(generateButton);
+
+  const errorMsg = document.createElement("div");
+  errorMsg.id = "error-message";
+  errorMsg.className = "text-red-500";
+
+  searchContainer.appendChild(searchBox);
+  searchContainer.appendChild(errorMsg);
+  mapContainer.appendChild(searchContainer);
+
+  // 하단 위치 카드 캐러셀
+  const cardCarouselContainer = document.createElement("div");
+  cardCarouselContainer.className =
+    "absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300";
+
+  const cardContainer = document.createElement("div");
+  cardContainer.id = "card-container";
+  cardContainer.className =
+    "flex overflow-x-auto scroll-smooth py-3 px-3 rounded-2xl backdrop-blur-sm bg-white/5 border border-white/10 relative";
+
+  const navControls = document.createElement("div");
+  navControls.className = "flex justify-center items-center mt-4";
+
+  const prevButton = document.createElement("button");
+  prevButton.id = "prev-card";
+  prevButton.className =
+    "bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all hover:bg-[#F7F7F7] hover:shadow-md";
+
+  const prevIcon = document.createElement("i");
+  prevIcon.className = "fas fa-chevron-left";
+  prevButton.appendChild(prevIcon);
+
+  const carouselIndicators = document.createElement("div");
+  carouselIndicators.id = "carousel-indicators";
+  carouselIndicators.className = "flex mx-4";
+
+  const nextButton = document.createElement("button");
+  nextButton.id = "next-card";
+  nextButton.className =
+    "bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all hover:bg-[#F7F7F7] hover:shadow-md";
+
+  const nextIcon = document.createElement("i");
+  nextIcon.className = "fas fa-chevron-right";
+  nextButton.appendChild(nextIcon);
+
+  navControls.appendChild(prevButton);
+  navControls.appendChild(carouselIndicators);
+  navControls.appendChild(nextButton);
+
+  cardCarouselContainer.appendChild(cardContainer);
+  cardCarouselContainer.appendChild(navControls);
+  mapContainer.appendChild(cardCarouselContainer);
+
+  // 리셋 버튼
+  const resetButton = document.createElement("button");
+  resetButton.id = "reset";
+  resetButton.className =
+    "absolute bottom-8 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-md transition-all hover:bg-[#F7F7F7] hover:shadow-lg";
+
+  const resetIcon = document.createElement("i");
+  resetIcon.className = "fas fa-undo";
+  resetButton.appendChild(resetIcon);
+  mapContainer.appendChild(resetButton);
+
+  // 맵 오버레이
+  const mapOverlay = document.createElement("div");
+  mapOverlay.id = "map-overlay";
+  mapOverlay.className = "fixed inset-0 bg-black/50 z-[9] hidden";
+
+  // 타임라인 컨테이너
+  const timelineContainer = document.createElement("div");
+  timelineContainer.id = "timeline-container";
+  timelineContainer.className =
+    "fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-md shadow-lg z-[1000] overflow-hidden hidden transition-transform duration-300";
+
+  const timelineToggle = document.createElement("button");
+  timelineToggle.id = "timeline-toggle";
+  timelineToggle.className =
+    "absolute top-1/2 -translate-y-1/2 -left-10 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-md border border-r-0 hidden";
+
+  const timelineToggleIcon = document.createElement("i");
+  timelineToggleIcon.className = "fas fa-calendar-alt";
+  timelineToggle.appendChild(timelineToggleIcon);
+
+  const timelineHeader = document.createElement("div");
+  timelineHeader.className =
+    "p-4 flex justify-between items-center border-b border-gray-200 sticky top-0 bg-white z-[2]";
+
+  const timelineTitle = document.createElement("h3");
+  timelineTitle.className = "text-base font-semibold text-gray-800";
+  timelineTitle.textContent = "일일 여행 계획";
+
+  const timelineActions = document.createElement("div");
+  timelineActions.className = "flex gap-2";
+
+  const exportButton = document.createElement("button");
+  exportButton.id = "export-plan";
+  exportButton.className =
+    "bg-transparent border-none cursor-pointer text-sm text-gray-600 flex items-center p-1 px-2 rounded transition-colors hover:bg-gray-100 hover:text-gray-800";
+
+  const exportIcon = document.createElement("i");
+  exportIcon.className = "fas fa-download";
+  exportButton.appendChild(exportIcon);
+  exportButton.appendChild(document.createTextNode(" 내보내기"));
+
+  const closeButton = document.createElement("button");
+  closeButton.id = "close-timeline";
+  closeButton.className =
+    "bg-transparent border-none cursor-pointer text-sm text-gray-600 flex items-center p-1 px-2 rounded transition-colors hover:bg-gray-100 hover:text-gray-800";
+
+  const closeIcon = document.createElement("i");
+  closeIcon.className = "fas fa-times";
+  closeButton.appendChild(closeIcon);
+
+  timelineActions.appendChild(exportButton);
+  timelineActions.appendChild(closeButton);
+
+  timelineHeader.appendChild(timelineTitle);
+  timelineHeader.appendChild(timelineActions);
+
+  const timelineContent = document.createElement("div");
+  timelineContent.id = "timeline";
+  timelineContent.className = "px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]";
+
+  timelineContainer.appendChild(timelineToggle);
+  timelineContainer.appendChild(timelineHeader);
+  timelineContainer.appendChild(timelineContent);
+
+  // 메인 스피너
+  const mainSpinner = document.createElement("div");
+  mainSpinner.id = "spinner";
+  mainSpinner.className =
+    "hidden fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50px] h-[50px] border-[5px] border-black/10 border-t-[#3498db] rounded-full animate-spin transition-opacity";
+
+  // 요소들을 body에 추가
+  document.body.appendChild(mapContainer);
+  document.body.appendChild(mapOverlay);
+  document.body.appendChild(timelineContainer);
+  document.body.appendChild(mainSpinner);
+
+  // 폰트 어썸과 테일윈드 스타일 로드
+  if (!document.querySelector('link[href*="font-awesome"]')) {
+    const fontAwesome = document.createElement("link");
+    fontAwesome.rel = "stylesheet";
+    fontAwesome.href =
+      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
+    document.head.appendChild(fontAwesome);
+  }
+
+  // 테일윈드 설정 확인
+  if (!document.querySelector('script[src*="tailwindcss"]')) {
+    const tailwindScript = document.createElement("script");
+    tailwindScript.src = "https://cdn.tailwindcss.com";
+
+    // 테일윈드 설정 스크립트 추가
+    const tailwindConfig = document.createElement("script");
+    tailwindConfig.textContent = `
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#2196F3",
+            },
+            boxShadow: {
+              card: "0 4px 12px rgba(0, 0, 0, 0.1)",
+              "card-hover": "0 6px 16px rgba(0, 0, 0, 0.14)",
+            },
+          },
+        },
+      };
+    `;
+
+    document.head.appendChild(tailwindScript);
+    document.head.appendChild(tailwindConfig);
+  }
+
+  // importmap 설정
+  if (!document.querySelector('script[type="importmap"]')) {
+    const importMap = document.createElement("script");
+    importMap.type = "importmap";
+    importMap.textContent = `
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^0.7.0"
+        }
+      }
+    `;
+    document.head.appendChild(importMap);
+  }
+}
+
+// 페이지 로드 시 UI 생성 및 기본 설정
+document.addEventListener("DOMContentLoaded", () => {
+  // 기존 HTML 내용 제거
+  document.body.innerHTML = "";
+  document.body.className = "m-0 p-0 h-full font-sans";
+
+  // 새 UI 생성
+  createAppUI();
+
+  // 이벤트 리스너 재설정 및 초기화 작업
+  const promptInput = document.querySelector(
+    "#prompt-input"
+  ) as HTMLTextAreaElement;
+  if (promptInput) {
+    promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.code === "Enter" && !e.shiftKey) {
+        const buttonEl = document.getElementById(
+          "generate"
+        ) as HTMLButtonElement;
+        buttonEl.classList.add("loading");
+        e.preventDefault();
+        e.stopPropagation();
+
+        setTimeout(() => {
+          sendText(promptInput.value);
+          promptInput.value = "";
+        }, 10);
+      }
+    });
+  }
+
+  const generateButton = document.querySelector("#generate");
+  if (generateButton) {
+    generateButton.addEventListener("click", (e) => {
+      const buttonEl = e.currentTarget as HTMLButtonElement;
+      buttonEl.classList.add("loading");
+
+      setTimeout(() => {
+        sendText(promptInput.value);
+      }, 10);
+    });
+  }
+
+  const resetButton = document.querySelector("#reset");
+  if (resetButton) {
+    resetButton.addEventListener("click", (e) => {
+      restart();
+    });
+  }
+
+  const prevCardButton = document.querySelector("#prev-card");
+  if (prevCardButton) {
+    prevCardButton.addEventListener("click", () => {
+      navigateCards(-1);
+    });
+  }
+
+  const nextCardButton = document.querySelector("#next-card");
+  if (nextCardButton) {
+    nextCardButton.addEventListener("click", () => {
+      navigateCards(1);
+    });
+  }
+
+  const closeTimelineButton = document.querySelector("#close-timeline");
+  if (closeTimelineButton) {
+    closeTimelineButton.addEventListener("click", () => {
+      hideTimeline();
+    });
+  }
+
+  const timelineToggle = document.querySelector("#timeline-toggle");
+  if (timelineToggle) {
+    timelineToggle.addEventListener("click", () => {
+      showTimeline();
+    });
+  }
+
+  const mapOverlay = document.querySelector("#map-overlay");
+  if (mapOverlay) {
+    mapOverlay.addEventListener("click", () => {
+      hideTimeline();
+    });
+  }
+
+  const exportPlanButton = document.querySelector("#export-plan");
+  if (exportPlanButton) {
+    exportPlanButton.addEventListener("click", () => {
+      exportDayPlan();
+    });
+  }
+});
+
 // Function declaration for extracting location data using Google AI.
 const locationFunctionDeclaration: FunctionDeclaration = {
   name: "location",
@@ -304,74 +677,6 @@ function adjustInterfaceForTimeline(isTimelineVisible) {
       map.fitBounds(bounds);
     }, 350); // Delay to allow layout adjustments
   }
-}
-
-// Event Listeners for UI elements.
-const promptInput = document.querySelector(
-  "#prompt-input"
-) as HTMLTextAreaElement;
-promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (e.code === "Enter" && !e.shiftKey) {
-    // Allow shift+enter for new lines
-    const buttonEl = document.getElementById("generate") as HTMLButtonElement;
-    buttonEl.classList.add("loading");
-    e.preventDefault();
-    e.stopPropagation();
-
-    setTimeout(() => {
-      sendText(promptInput.value);
-      promptInput.value = "";
-    }, 10); // Delay to show loading state
-  }
-});
-
-generateButton.addEventListener("click", (e) => {
-  const buttonEl = e.currentTarget as HTMLButtonElement;
-  buttonEl.classList.add("loading");
-
-  setTimeout(() => {
-    sendText(promptInput.value);
-  }, 10);
-});
-
-resetButton.addEventListener("click", (e) => {
-  restart();
-});
-
-if (prevCardButton) {
-  prevCardButton.addEventListener("click", () => {
-    navigateCards(-1);
-  });
-}
-
-if (nextCardButton) {
-  nextCardButton.addEventListener("click", () => {
-    navigateCards(1);
-  });
-}
-
-if (closeTimelineButton) {
-  closeTimelineButton.addEventListener("click", () => {
-    hideTimeline();
-  });
-}
-
-if (timelineToggle) {
-  timelineToggle.addEventListener("click", () => {
-    showTimeline();
-  });
-}
-
-if (mapOverlay) {
-  mapOverlay.addEventListener("click", () => {
-    hideTimeline();
-  });
-}
-
-if (exportPlanButton) {
-  exportPlanButton.addEventListener("click", () => {
-    exportDayPlan();
-  });
 }
 
 // Resets the map and application state to initial conditions.
