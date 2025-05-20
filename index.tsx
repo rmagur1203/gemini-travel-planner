@@ -7,207 +7,8 @@ import React, {
 } from "react";
 import ReactDOM from "react-dom/client";
 // import App from "./components/react/App"; // App 컴포넌트는 파일 내에 정의될 예정
-
-import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
-
-// Function declaration for extracting location data using Google AI.
-export const locationFunctionDeclaration: FunctionDeclaration = {
-  name: "location",
-  parameters: {
-    type: Type.OBJECT,
-    description: "장소의 지리적 좌표 정보.",
-    properties: {
-      name: {
-        type: Type.STRING,
-        description: "장소의 이름.",
-      },
-      description: {
-        type: Type.STRING,
-        description:
-          "장소에 대한 설명: 왜 이 장소가 중요한지, 알아두면 좋을 세부 정보.",
-      },
-      lat: {
-        type: Type.STRING,
-        description: "장소의 위도.",
-      },
-      lng: {
-        type: Type.STRING,
-        description: "장소의 경도.",
-      },
-      // Properties specific to Day Planner mode
-      time: {
-        type: Type.STRING,
-        description: '이 장소를 방문할 시간 (예: "09:00", "14:30").',
-      },
-      duration: {
-        type: Type.STRING,
-        description: '이 장소에서 머무를 권장 시간 (예: "1시간", "45분").',
-      },
-      sequence: {
-        type: Type.NUMBER,
-        description: "일일 일정에서의 순서 (1 = 하루의 첫 번째 목적지).",
-      },
-    },
-    required: ["name", "description", "lat", "lng"],
-  },
-};
-
-// Function declaration for extracting route/line data using Google AI.
-export const lineFunctionDeclaration: FunctionDeclaration = {
-  name: "line",
-  parameters: {
-    type: Type.OBJECT,
-    description: "출발 장소와 도착 장소 사이의 연결.",
-    properties: {
-      name: {
-        type: Type.STRING,
-        description: "경로 또는 연결의 이름",
-      },
-      start: {
-        type: Type.OBJECT,
-        description: "경로의 시작 위치",
-        properties: {
-          lat: {
-            type: Type.STRING,
-            description: "시작 위치의 위도.",
-          },
-          lng: {
-            type: Type.STRING,
-            description: "시작 위치의 경도.",
-          },
-        },
-      },
-      end: {
-        type: Type.OBJECT,
-        description: "경로의 종료 위치",
-        properties: {
-          lat: {
-            type: Type.STRING,
-            description: "종료 위치의 위도.",
-          },
-          lng: {
-            type: Type.STRING,
-            description: "종료 위치의 경도.",
-          },
-        },
-      },
-      // Properties specific to Day Planner mode
-      transport: {
-        type: Type.STRING,
-        description: '위치 간 이동 수단 (예: "도보", "자동차", "대중교통").',
-      },
-      travelTime: {
-        type: Type.STRING,
-        description: '위치 간 예상 이동 시간 (예: "15분", "1시간").',
-      },
-    },
-    required: ["name", "start", "end"],
-  },
-};
-
-// System instructions provided to the Google AI model guiding its responses.
-export const systemInstructions = `## 여행 일정 계획 시스템 지침
-
-**모델 역할:** 당신은 지도를 통해 시각적 정보를 제공하는 지리적 지식이 풍부한 어시스턴트입니다.
-당신의 주요 목표는 사용자가 요청한 모든 장소에 대한 상세한 일일 여행 일정을 만드는 것입니다.
-가상이든 실제든, 과거, 현재, 미래의 거의 모든 장소에 대한 정보를 처리할 수 있습니다.
-
-**핵심 능력:**
-
-1. **지리적 지식:** 당신은 다음에 관한 광범위한 지식을 보유하고 있습니다:
-   * 전 세계 장소, 랜드마크, 관광 명소
-   * 역사적 유적지와 그 중요성
-   * 자연 경관과 지리
-   * 문화적 관심 장소
-   * 여행 경로 및 교통 수단 옵션
-
-2. **일정 계획 모드:**
-   * 상세한 일일 여행 일정 작성:
-     * 하루 동안 방문할 장소의 논리적 순서 (일반적으로 4-6개의 주요 정류장)
-     * 각 장소 방문에 대한 구체적인 시간과 현실적인 소요 시간
-     * 장소 간 이동을 위한 적절한 교통 수단
-     * 이동 시간, 식사 시간, 방문 시간을 고려한 균형 잡힌 일정
-     * 각 장소는 'time' (예: "09:00")과 'duration' 속성을 포함해야 함
-     * 각 장소는 순서를 나타내는 'sequence' 번호 (1, 2, 3 등)를 포함해야 함
-     * 장소를 연결하는 각 선은 'transport'와 'travelTime' 속성을 포함해야 함
-
-**출력 형식:**
-   * 필수 time, duration, sequence 속성과 함께 각 정류장에 "location" 함수 사용
-   * transport와 travelTime 속성과 함께 정류장을 연결하기 위해 "line" 함수 사용
-   * 논리적인 순서와 현실적인 시간으로 하루 일정 구성
-   * 각 장소에서 무엇을 할 수 있는지 구체적인 세부 정보 포함
-
-**중요 지침:**
-* 항상 location 함수를 통해 지리적 데이터 제공
-* 특정 위치가 확실하지 않은 경우, 최선의 판단으로 좌표 제공
-* 단순한 질문이나 명확화 요청으로만 답변하지 말 것
-* 복잡하거나 추상적인 쿼리에도 항상 시각적으로 정보를 매핑하도록 시도`;
-
-// Google AI 클라이언트 초기화
-export function initializeAI() {
-  return new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
-}
-
-// AI 응답 생성 함수
-export async function generateContentStream(prompt: string, ai: GoogleGenAI) {
-  let finalPrompt = prompt + " 일일 여행 계획";
-
-  return await ai.models.generateContentStream({
-    model: "gemini-2.0-flash-exp",
-    contents: finalPrompt,
-    config: {
-      systemInstruction: systemInstructions,
-      temperature: 1,
-      tools: [
-        {
-          functionDeclarations: [
-            locationFunctionDeclaration,
-            lineFunctionDeclaration,
-          ],
-        },
-      ],
-    },
-  });
-}
-
-/**
- * Google Maps 관련 타입 선언
- */
-declare global {
-  interface Window {
-    Popup: any;
-  }
-}
-
-/**
- * 위치 정보 타입
- */
-export interface LocationInfo {
-  name: string;
-  description: string;
-  position: google.maps.LatLng;
-  popup: any;
-  content: HTMLElement;
-  time?: string;
-  duration?: string;
-  sequence?: number;
-}
-
-/**
- * 경로 정보 타입
- */
-export interface LineInfo {
-  poly: google.maps.Polyline;
-  geodesicPoly: google.maps.Polyline;
-  name: string;
-  transport?: string;
-  travelTime?: string;
-}
-
-export interface Point {
-  lat: number;
-  lng: number;
-}
+import { initializeAI, generateContentStream } from "./ai";
+import { LocationInfo, LineInfo, Point } from "./types";
 
 // --- Google Maps Service --- (기존 maps.ts 내용을 통합 및 수정)
 let map: google.maps.Map | null = null;
@@ -227,24 +28,6 @@ async function initializeMapsLibraries() {
     "marker"
   )) as typeof google.maps.marker;
   return { Map, LatLngBounds, AdvancedMarkerElement };
-}
-
-async function initMapInstance(
-  mapElement: HTMLElement
-): Promise<google.maps.Map> {
-  if (!mapElement) throw new Error("Map element not found");
-  const { Map, LatLngBounds } = await initializeMapsLibraries();
-  bounds = new LatLngBounds();
-  map = new Map(mapElement, {
-    center: { lat: 0, lng: 0 },
-    zoom: 3,
-    mapId: "f91cb79a63f06c51", // 여기에 실제 Map ID를 사용하세요.
-    disableDefaultUI: true,
-    zoomControl: true,
-    streetViewControl: false,
-    mapTypeControl: false,
-  });
-  return map;
 }
 
 async function setPinOnMap(
@@ -319,7 +102,13 @@ async function setPinOnMap(
 }
 
 async function setLegOnMap(
-  args: { origin: string; destination: string; waypoints?: Point[] },
+  args: {
+    origin: string;
+    destination: string;
+    waypoints?: Point[];
+    transport?: string;
+    travelTime?: string;
+  },
   currentMap: google.maps.Map
 ) {
   const directionsService = new google.maps.DirectionsService();
@@ -334,44 +123,180 @@ async function setLegOnMap(
     },
   });
 
+  // 위치 데이터를 안전하게 LatLng 객체로 변환
+  const createValidLatLng = (location: any): google.maps.LatLng => {
+    try {
+      // null 또는 undefined 처리
+      if (location === null || location === undefined) {
+        return new google.maps.LatLng(37.5519, 126.9918); // 서울 좌표
+      }
+
+      // 이미 LatLng 객체인 경우
+      if (location instanceof google.maps.LatLng) {
+        return location;
+      }
+
+      // JSON 문자열 처리 시도
+      if (typeof location === "string") {
+        // JSON 문자열 파싱 시도
+        try {
+          if (location.startsWith("{") && location.endsWith("}")) {
+            const parsed = JSON.parse(location);
+            if (parsed.lat !== undefined && parsed.lng !== undefined) {
+              const lat = parseFloat(String(parsed.lat));
+              const lng = parseFloat(String(parsed.lng));
+              if (!isNaN(lat) && !isNaN(lng)) {
+                return new google.maps.LatLng(lat, lng);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to parse JSON location string");
+        }
+
+        // 좌표 형식의 문자열인 경우 ("37.123,127.456" 형태)
+        if (location.includes(",")) {
+          const [latStr, lngStr] = location.split(",");
+          const lat = parseFloat(latStr.trim());
+          const lng = parseFloat(lngStr.trim());
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return new google.maps.LatLng(lat, lng);
+          }
+        }
+
+        // 정규식을 사용하여 숫자만 추출 시도
+        const numbersInStr = location.match(/-?\d+\.\d+/g);
+        if (numbersInStr && numbersInStr.length >= 2) {
+          const lat = parseFloat(numbersInStr[0]);
+          const lng = parseFloat(numbersInStr[1]);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return new google.maps.LatLng(lat, lng);
+          }
+        }
+      }
+
+      // 객체 형태 처리 (lat, lng 속성)
+      if (typeof location === "object" && location !== null) {
+        if (location.lat !== undefined && location.lng !== undefined) {
+          const lat = parseFloat(String(location.lat));
+          const lng = parseFloat(String(location.lng));
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return new google.maps.LatLng(lat, lng);
+          }
+        }
+      }
+
+      // 서울 좌표 (기본값)
+      console.warn("Invalid location, using default:", location);
+      return new google.maps.LatLng(37.5519, 126.9918); // 서울 중심 좌표
+    } catch (e) {
+      console.error("Error creating LatLng:", e);
+      return new google.maps.LatLng(37.5519, 126.9918); // 서울 중심 좌표
+    }
+  };
+
+  // 요청 파라미터 준비
+  let originLatLng, destinationLatLng;
+
+  try {
+    // 좌표 객체로 변환을 시도
+    originLatLng = createValidLatLng(args.origin);
+    destinationLatLng = createValidLatLng(args.destination);
+
+    console.log("Direction parameters:", {
+      originInput: args.origin,
+      destinationInput: args.destination,
+      originConverted: originLatLng.toString(),
+      destinationConverted: destinationLatLng.toString(),
+    });
+  } catch (e) {
+    console.error("Failed to convert coordinates:", e);
+    originLatLng = new google.maps.LatLng(37.5519, 126.9918);
+    destinationLatLng = new google.maps.LatLng(37.5665, 126.978);
+  }
+
+  // 안전한 요청 생성
   const request: google.maps.DirectionsRequest = {
-    origin: args.origin,
-    destination: args.destination,
+    origin: originLatLng,
+    destination: destinationLatLng,
     travelMode: google.maps.TravelMode.DRIVING,
     waypoints: args.waypoints?.map((p) => ({
-      location: new google.maps.LatLng(p.lat, p.lng),
+      location: new google.maps.LatLng(
+        parseFloat(String(p.lat)),
+        parseFloat(String(p.lng))
+      ),
     })),
   };
 
   return new Promise<void>((resolve, reject) => {
-    directionsService.route(request, (result, status) => {
-      if (status == google.maps.DirectionsStatus.OK && result) {
-        directionsRenderer.setDirections(result);
-        if (result.routes[0]?.legs[0]) {
-          const leg = result.routes[0].legs[0];
-          const path = result.routes[0].overview_path;
-          const polyline = new google.maps.Polyline({
-            path: path,
-            strokeColor: "#2196F3",
-            strokeOpacity: 0.8,
-            strokeWeight: 5,
-            map: currentMap,
-          });
+    try {
+      directionsService.route(request, (result, status) => {
+        if (status == google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.setDirections(result);
+          if (result.routes[0]?.legs[0]) {
+            const leg = result.routes[0].legs[0];
+            const path = result.routes[0].overview_path;
+            const polyline = new google.maps.Polyline({
+              path: path,
+              strokeColor: "#2196F3",
+              strokeOpacity: 0.8,
+              strokeWeight: 5,
+              map: currentMap,
+            });
 
-          lines.push({
-            poly: polyline,
-            geodesicPoly: polyline,
-            name: `${args.origin} 에서 ${args.destination}`,
-            transport: "DRIVING",
-            travelTime: leg.duration?.text,
+            // 표시용 이름 생성
+            let displayName = "경로";
+
+            try {
+              // 좌표 이름에서 더 인간이 읽기 쉬운 이름 추출
+              if (
+                typeof args.origin === "string" &&
+                typeof args.destination === "string"
+              ) {
+                // JSON 문자열인 경우 파싱 시도
+                if (
+                  (args.origin.startsWith("{") && args.origin.endsWith("}")) ||
+                  (args.destination.startsWith("{") &&
+                    args.destination.endsWith("}"))
+                ) {
+                  displayName = "경로";
+                }
+                // 좌표 문자열이 아닌 경우 그대로 사용
+                else if (
+                  !args.origin.match(/^\s*[\d\.\-]+\s*,\s*[\d\.\-]+\s*$/) &&
+                  !args.destination.match(/^\s*[\d\.\-]+\s*,\s*[\d\.\-]+\s*$/)
+                ) {
+                  displayName = `${args.origin} 에서 ${args.destination}`;
+                }
+              }
+            } catch (e) {
+              console.warn("Error creating line name:", e);
+            }
+
+            lines.push({
+              poly: polyline,
+              geodesicPoly: polyline,
+              name: displayName,
+              transport: args.transport || "DRIVING",
+              travelTime: leg.duration?.text,
+            });
+          }
+          resolve();
+        } else {
+          console.error("Directions request failed due to " + status);
+          console.log("Request details:", {
+            origin: request.origin,
+            destination: request.destination,
           });
+          // 오류가 발생해도 애플리케이션이 계속 실행되도록 resolve
+          resolve();
         }
-        resolve();
-      } else {
-        console.error("Directions request failed due to " + status);
-        reject(new Error("Directions request failed: " + status));
-      }
-    });
+      });
+    } catch (error) {
+      console.error("Exception in route request:", error);
+      // 오류가 발생해도 애플리케이션이 계속 실행되도록 resolve
+      resolve();
+    }
   });
 }
 
@@ -484,10 +409,12 @@ const Spinner: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
   if (!isVisible) return null;
 
   return (
-    <div
-      id="spinner"
-      className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50px] h-[50px] border-[5px] border-black/10 border-t-primary rounded-full animate-spin-slow transition-opacity"
-    ></div>
+    <div className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none">
+      <div
+        id="spinner"
+        className="w-[50px] h-[50px] border-[5px] border-black/10 border-t-primary rounded-full animate-spin-slow transition-opacity"
+      ></div>
+    </div>
   );
 };
 
@@ -722,15 +649,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
           id="generate"
           onClick={submitPrompt}
           disabled={isLocalLoading || !prompt.trim()}
-          className={`bg-primary text-white border-none rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer ml-2 transition-all duration-200 relative hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex-shrink-0 mt-0.5 \${isLocalLoading ? "animate-pulse" : ""}`}
+          className={`bg-primary text-white border-none rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer ml-2 transition-all duration-200 relative hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex-shrink-0 mt-0.5 ${
+            isLocalLoading ? "animate-pulse" : ""
+          }`}
           title="계획 생성"
         >
           <i
-            className={`fas fa-arrow-right transition-opacity duration-200 \${buttonIconClass}`}
+            className={`fas fa-arrow-right transition-opacity duration-200 ${buttonIconClass}`}
           ></i>
           <div
-            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white animate-spin-slow transition-opacity duration-200 \${spinnerVisibilityClass}`}
-          ></div>
+            className={`absolute inset-0 flex items-center justify-center w-full h-full transition-opacity duration-200 ${spinnerVisibilityClass}`}
+          >
+            <div className="w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white animate-spin-slow"></div>
+          </div>
         </button>
       </div>
       {errorMessage && (
@@ -748,7 +679,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
 const MapContainer: React.FC<{
   children: ReactNode;
   onResetClick: () => void;
-}> = ({ children, onResetClick }) => {
+  onToggleTimeline: () => void;
+}> = ({ children, onResetClick, onToggleTimeline }) => {
   return (
     <>
       {children}
@@ -759,6 +691,14 @@ const MapContainer: React.FC<{
         title="계획 초기화"
       >
         <i className="fas fa-undo text-gray-600 text-sm"></i>
+      </button>
+      <button
+        id="timeline-toggle"
+        onClick={onToggleTimeline}
+        className="absolute bottom-5 left-16 z-10 bg-white/80 backdrop-blur-sm border border-gray-300 rounded-full w-9 h-9 flex items-center justify-center cursor-pointer shadow-lg transition-all hover:bg-gray-100 hover:shadow-xl active:scale-95"
+        title="타임라인 열기/닫기"
+      >
+        <i className="fas fa-calendar-alt text-gray-600 text-sm"></i>
       </button>
     </>
   );
@@ -787,7 +727,7 @@ const Timeline: React.FC<TimelineProps> = ({
     return sortedLocations.map((location, index) => {
       const nextLocation = sortedLocations[index + 1];
       const isActive = index === activeCardIndex;
-      let travelInfo = null;
+      let travelInfo: { transport: string; travelTime: string } | null = null;
 
       if (nextLocation) {
         const connectingLine = lines.find((line) => {
@@ -811,18 +751,26 @@ const Timeline: React.FC<TimelineProps> = ({
       const itemKey = `${location.name}-${index}-${
         location.sequence || "nosq"
       }`;
-      const itemContainerClass = `flex mb-2 relative cursor-pointer rounded-lg p-2.5 transition-all duration-200 ease-in-out \${isActive ? "bg-primary/10 shadow-sm" : "hover:bg-gray-100/80"}`;
+      const itemContainerClass = `flex mb-2 relative cursor-pointer rounded-lg p-2.5 transition-all duration-200 ease-in-out ${
+        isActive ? "bg-primary/10 shadow-sm" : "hover:bg-gray-100/80"
+      }`;
       const timeClass =
         "w-16 text-primary font-medium text-xs pt-0.5 text-center shrink-0";
       const iconDotContainerClass =
         "flex flex-col items-center mx-2.5 shrink-0";
-      const iconDotClass = `w-3 h-3 rounded-full mt-1 transition-all duration-200 \${isActive ? "bg-primary ring-2 ring-primary/30" : "bg-gray-300"}`;
+      const iconDotClass = `w-3 h-3 rounded-full mt-1 transition-all duration-200 ${
+        isActive ? "bg-primary ring-2 ring-primary/30" : "bg-gray-300"
+      }`;
       const lineConnectorClass = "flex-1 w-px bg-gray-200 my-1.5";
       const contentContainerClass = "flex-1 pr-1 pb-0.5 min-w-0";
-      const locationNameClass = `font-semibold text-sm mb-0.5 truncate \${isActive ? "text-primary" : "text-gray-800"}`;
+      const locationNameClass = `font-semibold text-sm mb-0.5 truncate ${
+        isActive ? "text-primary" : "text-gray-800"
+      }`;
       const travelInfoContainerClass =
         "flex mb-2 relative pl-[calc(4rem+0.625rem+0.625rem)] pr-2.5";
-      const travelInfoIconClass = `fas fa-\${getTransportIcon(travelInfo?.transport || "")} mr-1.5 text-gray-400 w-3 text-center`;
+      const travelInfoIconClass = `fas fa-${getTransportIcon(
+        travelInfo?.transport || ""
+      )} mr-1.5 text-gray-400 w-3 text-center`;
 
       return (
         <React.Fragment key={itemKey}>
@@ -881,7 +829,9 @@ const Timeline: React.FC<TimelineProps> = ({
     });
   };
 
-  const timelineContainerClass = `fixed top-0 right-0 w-80 h-full bg-white/95 backdrop-blur-md shadow-xl z-[20] overflow-hidden \${isVisible ? "translate-x-0" : "translate-x-full"} transition-transform duration-300 ease-in-out border-l border-gray-200 flex flex-col`;
+  const timelineContainerClass = `fixed top-0 right-0 w-80 h-full bg-white/95 backdrop-blur-md shadow-xl z-[20] overflow-hidden ${
+    isVisible ? "translate-x-0" : "translate-x-full"
+  } transition-transform duration-300 ease-in-out border-l border-gray-200 flex flex-col`;
   return (
     <>
       <div className={timelineContainerClass} id="timeline-container">
@@ -989,7 +939,10 @@ const App: React.FC<AppProps> = ({
 
   return (
     <div className={appContainerClasses}>
-      <MapContainer onResetClick={onResetClick}>
+      <MapContainer
+        onResetClick={onResetClick}
+        onToggleTimeline={handleTimelineToggle}
+      >
         <SearchBar
           onGenerateClick={onGenerateClick}
           errorMessage={errorMessage}
@@ -1004,7 +957,9 @@ const App: React.FC<AppProps> = ({
       </MapContainer>
 
       <div
-        className={`fixed inset-0 bg-black/40 z-[15] md:hidden \${isTimelineVisible ? "block" : "hidden"}`}
+        className={`fixed inset-0 bg-black/40 z-[15] md:hidden ${
+          isTimelineVisible ? "block" : "hidden"
+        }`}
         id="map-overlay"
         onClick={handleMapOverlayClick}
       ></div>
@@ -1133,13 +1088,100 @@ const Main: React.FC = () => {
               resultsFound = true;
             }
             if (fn.name === "line" && mapInstanceRef.current && fn.args) {
-              const args = fn.args as {
-                origin: string;
-                destination: string;
-                waypoints?: Point[];
-              };
-              await setLegOnMap(args, mapInstanceRef.current);
-              resultsFound = true;
+              const rawArgs = fn.args as any;
+
+              // 디버깅 정보 기록
+              console.log("Line function args:", rawArgs);
+
+              // 출발지점 찾기 시도
+              let origin: any = null;
+              let destination: any = null;
+
+              // 처리 전략 1: origin, destination 직접 사용
+              if (rawArgs.origin) {
+                origin = rawArgs.origin;
+              }
+
+              if (rawArgs.destination) {
+                destination = rawArgs.destination;
+              }
+
+              // 처리 전략 2: start와 end 좌표 사용
+              if (!origin && rawArgs.start) {
+                origin = rawArgs.start;
+              }
+
+              if (!destination && rawArgs.end) {
+                destination = rawArgs.end;
+              }
+
+              // 처리 전략 3: name에서 추출 시도
+              if ((!origin || !destination) && rawArgs.name) {
+                try {
+                  const parts = rawArgs.name.split(" 에서 ");
+                  if (parts.length >= 2) {
+                    // 이름에서 출발지와 목적지를 꺼내서 사용
+                    if (!origin) origin = parts[0];
+                    if (!destination) destination = parts[1];
+                  }
+                } catch (e) {
+                  console.warn("Failed to parse name:", e);
+                }
+              }
+
+              // 처리 전략 4: 현재 지도에 있는 마커 사용
+              // 마커가 없는 경우 예외 처리
+              if ((!origin || !destination) && popUps.length >= 2) {
+                // 마커의 좌표 사용
+                if (!origin) {
+                  const firstLocation = popUps[0];
+                  origin = {
+                    lat: firstLocation.position.lat(),
+                    lng: firstLocation.position.lng(),
+                  };
+                }
+
+                if (!destination) {
+                  const lastLocation = popUps[popUps.length - 1];
+                  destination = {
+                    lat: lastLocation.position.lat(),
+                    lng: lastLocation.position.lng(),
+                  };
+                }
+              }
+
+              // 여전히 데이터가 없으면 기본값 제공
+              if (!origin) {
+                origin = { lat: 37.5519, lng: 126.9918 }; // 서울
+              }
+
+              if (!destination) {
+                destination = { lat: 37.5665, lng: 126.978 }; // 경복궁
+              }
+
+              console.log("Processed line data:", { origin, destination });
+
+              // 경로 설정 시도
+              try {
+                const args = {
+                  origin:
+                    typeof origin === "object"
+                      ? JSON.stringify(origin)
+                      : String(origin),
+                  destination:
+                    typeof destination === "object"
+                      ? JSON.stringify(destination)
+                      : String(destination),
+                  waypoints: rawArgs.waypoints as Point[] | undefined,
+                  transport: rawArgs.transport,
+                  travelTime: rawArgs.travelTime,
+                };
+
+                await setLegOnMap(args, mapInstanceRef.current);
+                resultsFound = true;
+              } catch (err) {
+                console.error("Error setting leg on map:", err);
+              }
             }
           }
         }
@@ -1155,6 +1197,54 @@ const Main: React.FC = () => {
             (a.sequence || Infinity) - (b.sequence || Infinity) ||
             (a.time || "").localeCompare(b.time || "")
         );
+
+        // 장소들 사이에 경로 생성
+        if (newLocations.length >= 2 && mapInstanceRef.current) {
+          console.log("장소들 간 경로를 자동으로 연결합니다...");
+          const currentMap = mapInstanceRef.current; // null 확인 후 로컬 변수에 저장
+
+          const connectPlaces = async () => {
+            for (let i = 0; i < newLocations.length - 1; i++) {
+              const origin = newLocations[i];
+              const destination = newLocations[i + 1];
+
+              // 이미 연결된 경로가 있는지 확인
+              const alreadyConnected = lines.some((line) => {
+                const originName = line.name.split(" 에서 ")[0];
+                const destinationName = line.name.split(" 에서 ")[1];
+                return (
+                  ((originName && originName.includes(origin.name)) ||
+                    origin.name.includes(originName || "")) &&
+                  ((destinationName &&
+                    destinationName.includes(destination.name)) ||
+                    destination.name.includes(destinationName || ""))
+                );
+              });
+
+              // 이미 연결되어 있지 않은 경우에만 새 경로 생성
+              if (!alreadyConnected) {
+                try {
+                  await setLegOnMap(
+                    {
+                      origin: `${origin.position.lat()},${origin.position.lng()}`,
+                      destination: `${destination.position.lat()},${destination.position.lng()}`,
+                      transport: "DRIVING",
+                    },
+                    currentMap // 이미 null 체크된 안전한 Map 객체 사용
+                  );
+                } catch (e) {
+                  console.error(
+                    `${origin.name}에서 ${destination.name}까지 경로 생성 실패:`,
+                    e
+                  );
+                }
+              }
+            }
+          };
+
+          await connectPlaces();
+        }
+
         setLocations(newLocations);
 
         if (
