@@ -1,33 +1,16 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>여행 일정 계획</title>
+    <title>Interactive Map Explorer</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: "#2196F3",
-            },
-            boxShadow: {
-              card: "0 4px 12px rgba(0, 0, 0, 0.1)",
-              "card-hover": "0 6px 16px rgba(0, 0, 0, 0.14)",
-              "card-active": "0 8px 24px rgba(0, 0, 0, 0.15)",
-            },
-            animation: {
-              "spin-slow": "spin 0.8s linear infinite",
-            },
-          },
-        },
-      };
-    </script>
+    <!-- Font Awesome CDN -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script type="importmap">
       {
         "imports": {
@@ -36,12 +19,153 @@
       }
     </script>
   </head>
-  <body class="m-0 p-0 h-full font-sans">
-    <div id="root" class="h-full"></div>
+  <body>
+    <!-- Main container for the map and related UI elements -->
+    <div
+      id="map-container"
+      class="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
+    >
+      <div id="map" class="h-full w-full"></div>
 
-    <!-- Google Maps JavaScript API 스크립트 -->
+      <!-- Container for search elements positioned at the top -->
+      <div
+        class="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]"
+      >
+        <!-- Toggle switch for enabling/disabling Day Planner Mode -->
+        <div
+          class="flex items-center mb-3 p-1 pr-3 bg-black/25 rounded-full w-max"
+        >
+          <label class="relative inline-block w-[46px] h-6">
+            <input
+              type="checkbox"
+              id="planner-mode-toggle"
+              class="opacity-0 w-0 h-0"
+            />
+            <span
+              class="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full"
+            ></span>
+          </label>
+          <span
+            class="ml-2.5 text-sm text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
+            >Day Planner Mode</span
+          >
+        </div>
+
+        <div
+          class="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+        >
+          <i class="fas fa-search text-[#717171] mr-3"></i>
+          <textarea
+            id="prompt-input"
+            placeholder="Explore places, history, events, or routes..."
+            class="flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent text-black"
+          ></textarea>
+          <button
+            id="generate"
+            class="bg-[#282828] text-white border-none rounded-full w-8 h-8 flex items-center justify-center cursor-pointer ml-3 transition-colors duration-200 hover:bg-[#282828] relative"
+          >
+            <i class="fas fa-arrow-right transition-opacity duration-200"></i>
+            <div
+              class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white animate-spin opacity-0 pointer-events-none transition-opacity duration-200"
+            ></div>
+          </button>
+        </div>
+
+        <div class="text-red py-4" id="error-message"></div>
+      </div>
+
+      <!-- Carousel for displaying location cards at the bottom -->
+      <div
+        class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300 ease-in-out"
+        id="card-carousel"
+      >
+        <div
+          class="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
+          id="card-container"
+        >
+          <!-- Location cards will be dynamically inserted here by the script -->
+        </div>
+        <div class="flex justify-center items-center mt-4">
+          <button
+            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+            id="prev-card"
+          >
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <div class="flex mx-4" id="carousel-indicators">
+            <!-- Indicator dots will be added dynamically -->
+          </div>
+          <button
+            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+            id="next-card"
+          >
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Button to reset the map and clear current results -->
+      <button
+        id="reset"
+        class="absolute bottom-8 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
+      >
+        <i class="fas fa-undo"></i>
+      </button>
+    </div>
+
+    <!-- Semi-transparent overlay displayed when timeline is open on mobile -->
+    <div class="fixed inset-0 bg-black/50 z-9 hidden" id="map-overlay"></div>
+
+    <!-- Sliding panel for displaying the day plan timeline -->
+    <div
+      class="fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden hidden transition-transform duration-300 ease-in-out"
+      id="timeline-container"
+    >
+      <!-- Button to toggle timeline visibility on mobile -->
+      <button
+        id="timeline-toggle"
+        class="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden"
+      >
+        <i class="fas fa-calendar-alt"></i>
+      </button>
+
+      <div
+        class="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2"
+      >
+        <h3 class="text-base font-semibold text-[#333]">Your Day Plan</h3>
+        <div class="flex gap-2">
+          <button
+            id="export-plan"
+            class="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+          >
+            <i class="fas fa-download"></i> Export
+          </button>
+          <button
+            id="close-timeline"
+            class="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <div
+        class="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
+        id="timeline"
+      >
+        <!-- Timeline items representing the day plan will be inserted here -->
+      </div>
+    </div>
+
+    <div
+      id="spinner"
+      class="absolute left-[calc(50%-25px)] top-[calc(50%-25px)] w-[50px] h-[50px] border-[5px] border-black/10 border-t-[#3498db] rounded-full pointer-events-none opacity-100 transition-opacity duration-1000 animate-spin hidden"
+    ></div>
+
+    <!-- End of elements inside map-container -->
+
+    <!-- Google Maps JavaScript API script -->
     <script>
-      // 구글 맵스 자바스크립트 API를 비동기적으로 로드하는 스크립트.
+      // Script to load the Google Maps JavaScript API asynchronously.
       ((g) => {
         var h,
           a,
@@ -78,6 +202,76 @@
           : (d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)));
       })({ key: "AIzaSyBoJ_PjvWy-mAvldANHZGaqXQCWS6JW67w", v: "weekly" });
     </script>
-    <script src="src/index.tsx" type="module"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            animation: {
+              spin: "spin 1s linear infinite",
+              dash: "dash 20s linear infinite",
+            },
+            keyframes: {
+              dash: {
+                to: { "stroke-dashoffset": "1000" },
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <style type="text/tailwind">
+      @layer utilities {
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .mask-gradient-x {
+          -webkit-mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 5%,
+            black 95%,
+            transparent 100%
+          );
+          mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 5%,
+            black 95%,
+            transparent 100%
+          );
+        }
+        input:checked + .slider {
+          @apply bg-[#2196F3];
+        }
+        input:focus + .slider {
+          @apply shadow-[0_0_1px_#2196F3];
+        }
+        input:checked + .slider:before {
+          transform: translateX(22px);
+        }
+
+        .search-button.loading .fa-arrow-right {
+          @apply opacity-0;
+        }
+        .search-button.loading .spinner {
+          @apply opacity-100;
+        }
+        .map-container-shifted {
+          @apply w-[calc(100%-320px)] left-0;
+        }
+        .timeline-container.visible {
+          @apply translate-x-0;
+        }
+        .map-overlay.visible {
+          @apply block;
+        }
+      }
+    </style>
   </body>
 </html>
