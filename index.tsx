@@ -3,129 +3,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
+import React, {
+  createContext,
+  KeyboardEventHandler,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
+import { LoadingProvider, Spinner } from "./loading";
 
-const { Map } = await google.maps.importLibrary("maps");
-const { LatLngBounds } = await google.maps.importLibrary("core");
-const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+const { Map } = (await google.maps.importLibrary(
+  "maps"
+)) as google.maps.MapsLibrary;
+const { LatLngBounds } = (await google.maps.importLibrary(
+  "core"
+)) as google.maps.CoreLibrary;
+const { AdvancedMarkerElement } = (await google.maps.importLibrary(
+  "marker"
+)) as google.maps.MarkerLibrary;
 
 // Application state variables
-let map; // Holds the Google Map instance
+let map: google.maps.Map; // Holds the Google Map instance
 let points = []; // Array to store geographical points from responses
 let markers = []; // Array to store map markers
 let lines = []; // Array to store polylines representing routes/connections
 let popUps = []; // Array to store custom popups for locations
-let bounds; // Google Maps LatLngBounds object to fit map around points
+let bounds: google.maps.LatLngBounds; // Google Maps LatLngBounds object to fit map around points
 let activeCardIndex = 0; // Index of the currently selected location card
 let isPlannerMode = false; // Flag to indicate if Day Planner mode is active
 let dayPlanItinerary = []; // Array to hold structured items for the day plan timeline
-
-// DOM Element references
-const generateButton = document.querySelector("#generate");
-const resetButton = document.querySelector("#reset");
-const cardContainer = document.querySelector(
-  "#card-container"
-) as HTMLDivElement;
-const carouselIndicators = document.querySelector(
-  "#carousel-indicators"
-) as HTMLDivElement;
-const prevCardButton = document.querySelector(
-  "#prev-card"
-) as HTMLButtonElement;
-const nextCardButton = document.querySelector(
-  "#next-card"
-) as HTMLButtonElement;
-const cardCarousel = document.querySelector(".card-carousel") as HTMLDivElement;
-const plannerModeToggle = document.querySelector(
-  "#planner-mode-toggle"
-) as HTMLInputElement;
-const timelineContainer = document.querySelector(
-  "#timeline-container"
-) as HTMLDivElement;
-const timeline = document.querySelector("#timeline") as HTMLDivElement;
-const closeTimelineButton = document.querySelector(
-  "#close-timeline"
-) as HTMLButtonElement;
-const exportPlanButton = document.querySelector(
-  "#export-plan"
-) as HTMLButtonElement;
-const mapContainer = document.querySelector("#map-container");
-const timelineToggle = document.querySelector("#timeline-toggle");
-const mapOverlay = document.querySelector("#map-overlay");
-const spinner = document.querySelector("#spinner");
-const errorMessage = document.querySelector("#error-message");
-
-// Initializes the Google Map instance and necessary libraries.
-async function initMap() {
-  bounds = new LatLngBounds();
-
-  map = new Map(document.getElementById("map"), {
-    center: { lat: -34.397, lng: 150.644 }, // Default center
-    zoom: 8, // Default zoom
-    mapId: "4504f8b37365c3d0", // Custom map ID for styling
-    gestureHandling: "greedy", // Allows easy map interaction on all devices
-    zoomControl: false,
-    cameraControl: false,
-    mapTypeControl: false,
-    scaleControl: false,
-    streetViewControl: false,
-    rotateControl: false,
-    fullscreenControl: false,
-  });
-
-  // Define a custom Popup class extending Google Maps OverlayView.
-  // This allows for custom HTML content near map markers.
-  window.Popup = class Popup extends google.maps.OverlayView {
-    position;
-    containerDiv;
-    constructor(position, content) {
-      super();
-      this.position = position;
-      content.classList.add("popup-bubble");
-
-      this.containerDiv = document.createElement("div");
-      this.containerDiv.classList.add("popup-container");
-      this.containerDiv.appendChild(content); // Append the actual content here
-      // Prevent clicks inside the popup from propagating to the map.
-      Popup.preventMapHitsAndGesturesFrom(this.containerDiv);
-    }
-
-    /** Called when the popup is added to the map via setMap(). */
-    onAdd() {
-      this.getPanes().floatPane.appendChild(this.containerDiv);
-    }
-
-    /** Called when the popup is removed from the map via setMap(null). */
-    onRemove() {
-      if (this.containerDiv.parentElement) {
-        this.containerDiv.parentElement.removeChild(this.containerDiv);
-      }
-    }
-
-    /** Called each frame when the popup needs to draw itself. */
-    draw() {
-      const divPosition = this.getProjection().fromLatLngToDivPixel(
-        this.position
-      );
-      // Hide the popup when it is far out of view for performance.
-      const display =
-        Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000
-          ? "block"
-          : "none";
-
-      if (display === "block") {
-        this.containerDiv.style.left = divPosition.x + "px";
-        this.containerDiv.style.top = divPosition.y + "px";
-      }
-
-      if (this.containerDiv.style.display !== display) {
-        this.containerDiv.style.display = display;
-      }
-    }
-  };
-}
-
-// Initialize the map as soon as the script loads.
-initMap();
 
 // Function declaration for extracting location data using Google AI.
 const locationFunctionDeclaration: FunctionDeclaration = {
@@ -287,6 +195,79 @@ Remember: In default mode, respond to ANY query by finding relevant locations to
 // Initialize the Google AI client.
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
+// Initializes the Google Map instance and necessary libraries.
+async function initMap() {
+  bounds = new LatLngBounds();
+
+  map = new Map(document.getElementById("map"), {
+    center: { lat: -34.397, lng: 150.644 }, // Default center
+    zoom: 8, // Default zoom
+    mapId: "4504f8b37365c3d0", // Custom map ID for styling
+    gestureHandling: "greedy", // Allows easy map interaction on all devices
+    zoomControl: false,
+    cameraControl: false,
+    mapTypeControl: false,
+    scaleControl: false,
+    streetViewControl: false,
+    rotateControl: false,
+    fullscreenControl: false,
+  });
+
+  // Define a custom Popup class extending Google Maps OverlayView.
+  // This allows for custom HTML content near map markers.
+  window.Popup = class Popup extends google.maps.OverlayView {
+    position: google.maps.LatLng | google.maps.LatLngLiteral | null;
+    containerDiv: HTMLElement;
+    constructor(
+      position: google.maps.LatLng | google.maps.LatLngLiteral | null,
+      content: HTMLElement
+    ) {
+      super();
+      this.position = position;
+      content.classList.add("popup-bubble");
+
+      this.containerDiv = document.createElement("div");
+      this.containerDiv.classList.add("popup-container");
+      this.containerDiv.appendChild(content); // Append the actual content here
+      // Prevent clicks inside the popup from propagating to the map.
+      Popup.preventMapHitsAndGesturesFrom(this.containerDiv);
+    }
+
+    /** Called when the popup is added to the map via setMap(). */
+    onAdd() {
+      this.getPanes()!.floatPane.appendChild(this.containerDiv);
+    }
+
+    /** Called when the popup is removed from the map via setMap(null). */
+    onRemove() {
+      if (this.containerDiv.parentElement) {
+        this.containerDiv.parentElement.removeChild(this.containerDiv);
+      }
+    }
+
+    /** Called each frame when the popup needs to draw itself. */
+    draw() {
+      const divPosition = this.getProjection().fromLatLngToDivPixel(
+        this.position
+      )!;
+      // Hide the popup when it is far out of view for performance.
+      const display =
+        Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000
+          ? "block"
+          : "none";
+
+      if (display === "block") {
+        this.containerDiv.style.left = divPosition.x + "px";
+        this.containerDiv.style.top = divPosition.y + "px";
+      }
+
+      if (this.containerDiv.style.display !== display) {
+        this.containerDiv.style.display = display;
+      }
+    }
+  };
+}
+
 // Functions to control the visibility of the timeline panel.
 function showTimeline() {
   if (timelineContainer) {
@@ -325,93 +306,12 @@ function hideTimeline() {
 }
 
 // Adjusts map bounds when the timeline visibility changes.
-function adjustInterfaceForTimeline(isTimelineVisible) {
+function adjustInterfaceForTimeline(isTimelineVisible: boolean) {
   if (bounds && map) {
     setTimeout(() => {
       map.fitBounds(bounds);
     }, 350); // Delay to allow layout adjustments
   }
-}
-
-// Event Listeners for UI elements.
-const promptInput = document.querySelector(
-  "#prompt-input"
-) as HTMLTextAreaElement;
-promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (e.code === "Enter" && !e.shiftKey) {
-    // Allow shift+enter for new lines
-    const buttonEl = document.getElementById("generate") as HTMLButtonElement;
-    buttonEl.classList.add("loading");
-    e.preventDefault();
-    e.stopPropagation();
-
-    setTimeout(() => {
-      sendText(promptInput.value);
-      promptInput.value = "";
-    }, 10); // Delay to show loading state
-  }
-});
-
-generateButton.addEventListener("click", (e) => {
-  const buttonEl = e.currentTarget as HTMLButtonElement;
-  buttonEl.classList.add("loading");
-
-  setTimeout(() => {
-    sendText(promptInput.value);
-  }, 10);
-});
-
-resetButton.addEventListener("click", (e) => {
-  restart();
-});
-
-if (prevCardButton) {
-  prevCardButton.addEventListener("click", () => {
-    navigateCards(-1);
-  });
-}
-
-if (nextCardButton) {
-  nextCardButton.addEventListener("click", () => {
-    navigateCards(1);
-  });
-}
-
-if (plannerModeToggle) {
-  plannerModeToggle.addEventListener("change", () => {
-    isPlannerMode = plannerModeToggle.checked;
-    promptInput.placeholder = isPlannerMode
-      ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
-      : "Explore places, history, events, or ask about any location...";
-
-    if (!isPlannerMode && timelineContainer) {
-      hideTimeline();
-    }
-  });
-}
-
-if (closeTimelineButton) {
-  closeTimelineButton.addEventListener("click", () => {
-    hideTimeline();
-  });
-}
-
-if (timelineToggle) {
-  timelineToggle.addEventListener("click", () => {
-    showTimeline();
-  });
-}
-
-if (mapOverlay) {
-  mapOverlay.addEventListener("click", () => {
-    hideTimeline();
-  });
-}
-
-if (exportPlanButton) {
-  exportPlanButton.addEventListener("click", () => {
-    exportDayPlan();
-  });
 }
 
 // Resets the map and application state to initial conditions.
@@ -532,7 +432,7 @@ async function sendText(prompt: string) {
 }
 
 // Adds a pin (marker and popup) to the map for a given location.
-async function setPin(args) {
+async function setPin(args: Record<string, unknown> | undefined) {
   const point = { lat: Number(args.lat), lng: Number(args.lng) };
   points.push(point);
   bounds.extend(point);
@@ -581,7 +481,7 @@ async function setPin(args) {
 }
 
 // Adds a line (route) between two locations on the map.
-async function setLeg(args) {
+async function setLeg(args: Record<string, unknown> | undefined) {
   const start = {
     lat: Number(args.start.lat),
     lng: Number(args.start.lng),
@@ -934,3 +834,307 @@ function exportDayPlan() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+async function run() {
+  // DOM Element references
+  const generateButton = document.querySelector("#generate");
+  const resetButton = document.querySelector("#reset");
+  const cardContainer = document.querySelector(
+    "#card-container"
+  ) as HTMLDivElement;
+  const carouselIndicators = document.querySelector(
+    "#carousel-indicators"
+  ) as HTMLDivElement;
+  const prevCardButton = document.querySelector(
+    "#prev-card"
+  ) as HTMLButtonElement;
+  const nextCardButton = document.querySelector(
+    "#next-card"
+  ) as HTMLButtonElement;
+  const cardCarousel = document.querySelector(
+    ".card-carousel"
+  ) as HTMLDivElement;
+  const plannerModeToggle = document.querySelector(
+    "#planner-mode-toggle"
+  ) as HTMLInputElement;
+  const timelineContainer = document.querySelector(
+    "#timeline-container"
+  ) as HTMLDivElement;
+  const timeline = document.querySelector("#timeline") as HTMLDivElement;
+  const closeTimelineButton = document.querySelector(
+    "#close-timeline"
+  ) as HTMLButtonElement;
+  const exportPlanButton = document.querySelector(
+    "#export-plan"
+  ) as HTMLButtonElement;
+  const mapContainer = document.querySelector("#map-container");
+  const timelineToggle = document.querySelector("#timeline-toggle");
+  const mapOverlay = document.querySelector("#map-overlay");
+  const spinner = document.querySelector("#spinner");
+  const errorMessage = document.querySelector("#error-message");
+
+  // Event Listeners for UI elements.
+  const promptInput = document.querySelector(
+    "#prompt-input"
+  ) as HTMLTextAreaElement;
+  // promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
+  //   if (e.code === "Enter" && !e.shiftKey) {
+  //     // Allow shift+enter for new lines
+  //     const buttonEl = document.getElementById("generate") as HTMLButtonElement;
+  //     buttonEl.classList.add("loading");
+  //     e.preventDefault();
+  //     e.stopPropagation();
+
+  //     setTimeout(() => {
+  //       sendText(promptInput.value);
+  //       promptInput.value = "";
+  //     }, 10); // Delay to show loading state
+  //   }
+  // });
+
+  // generateButton.addEventListener("click", (e) => {
+  //   const buttonEl = e.currentTarget as HTMLButtonElement;
+  //   buttonEl.classList.add("loading");
+
+  //   setTimeout(() => {
+  //     sendText(promptInput.value);
+  //   }, 10);
+  // });
+
+  resetButton.addEventListener("click", (e) => {
+    restart();
+  });
+
+  if (prevCardButton) {
+    prevCardButton.addEventListener("click", () => {
+      navigateCards(-1);
+    });
+  }
+
+  if (nextCardButton) {
+    nextCardButton.addEventListener("click", () => {
+      navigateCards(1);
+    });
+  }
+
+  if (plannerModeToggle) {
+    plannerModeToggle.addEventListener("change", () => {
+      isPlannerMode = plannerModeToggle.checked;
+      promptInput.placeholder = isPlannerMode
+        ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
+        : "Explore places, history, events, or ask about any location...";
+
+      if (!isPlannerMode && timelineContainer) {
+        hideTimeline();
+      }
+    });
+  }
+
+  if (closeTimelineButton) {
+    closeTimelineButton.addEventListener("click", () => {
+      hideTimeline();
+    });
+  }
+
+  if (timelineToggle) {
+    timelineToggle.addEventListener("click", () => {
+      showTimeline();
+    });
+  }
+
+  if (mapOverlay) {
+    mapOverlay.addEventListener("click", () => {
+      hideTimeline();
+    });
+  }
+
+  if (exportPlanButton) {
+    exportPlanButton.addEventListener("click", () => {
+      exportDayPlan();
+    });
+  }
+}
+
+interface ModeToggleProps {
+  isPlannerMode: boolean;
+  setPlannerMode: (isPlannerMode: boolean) => void;
+}
+
+function ModeToggle({ isPlannerMode, setPlannerMode }: ModeToggleProps) {
+  return (
+    <div className="flex items-center mb-[12px] p-[4px] pr-[12px] bg-black/25 flex-row w-max rounded-full">
+      <label className="relative inline-block w-[46px] h-[24px]">
+        <input
+          type="checkbox"
+          id="planner-mode-toggle"
+          className="opacity-0 w-0 h-0 peer"
+          checked={isPlannerMode}
+          onChange={(e) => setPlannerMode(e.target.checked)}
+        />
+        <span className="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full peer-checked:bg-[#2196F3] peer-checked:before:translate-x-[22px]"></span>
+      </label>
+      <span className="ml-2.5 text-sm text-white font-medium">
+        Day Planner Mode
+      </span>
+    </div>
+  );
+}
+
+interface PromptInputProps {
+  setPrompt: (prompt: string) => void;
+  onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
+}
+
+function PromptInput({ setPrompt, onKeyDown }: PromptInputProps) {
+  return (
+    <textarea
+      id="prompt-input"
+      placeholder="Explore places, history, events, or routes..."
+      className="flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent text-black"
+      onChange={(e) => setPrompt(e.target.value)}
+      onKeyDown={onKeyDown}
+    ></textarea>
+  );
+}
+
+interface GenerateButtonProps {
+  loading: boolean;
+  onClick: () => void;
+}
+
+function GenerateButton({ loading, onClick }: GenerateButtonProps) {
+  return (
+    <button
+      id="generate"
+      className="bg-[#282828] text-white border-none rounded-full w-8 h-8 flex items-center justify-center cursor-pointer ml-3 transition-colors duration-200 hover:bg-[#282828] relative"
+      onClick={onClick}
+    >
+      {loading ? (
+        <div className="absolute top-[50%-9px] left-[50%-9px] w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white animate-spin pointer-events-none transition-opacity duration-200"></div>
+      ) : (
+        <i className="fas fa-arrow-right transition-opacity duration-200"></i>
+      )}
+    </button>
+  );
+}
+
+interface ResetButtonProps {
+  onClick: () => void;
+}
+
+function ResetButton({ onClick }: ResetButtonProps) {
+  return (
+    <button
+      id="reset"
+      className="absolute bottom-8 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
+      onClick={onClick}
+    >
+      <i className="fas fa-undo"></i>
+    </button>
+  );
+}
+
+function GoogleMap() {
+  useEffect(() => {
+    initMap();
+  }, []);
+
+  return <div id="map" className="h-full w-full"></div>;
+}
+
+function MapContainer() {
+  const [prompt, setPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [isPlannerMode, setPlannerMode] = useState(false);
+
+  return (
+    <div
+      id="map-container"
+      className="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
+    >
+      <GoogleMap />
+
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]">
+        <ModeToggle
+          isPlannerMode={isPlannerMode}
+          setPlannerMode={setPlannerMode}
+        />
+
+        <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
+          <i className="fas fa-search text-[#717171] mr-3"></i>
+          <PromptInput
+            setPrompt={setPrompt}
+            onKeyDown={(e) => {
+              if (e.code === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                setGenerating(true);
+                sendText(prompt);
+              }
+            }}
+          />
+          <GenerateButton
+            loading={generating}
+            onClick={() => {
+              setGenerating(true);
+              sendText(prompt);
+            }}
+          />
+        </div>
+
+        <div className="text-red py-4" id="error-message"></div>
+      </div>
+
+      <div
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300 ease-in-out"
+        id="card-carousel"
+      >
+        <div
+          className="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
+          id="card-container"
+        >
+          {/* Location cards will be dynamically inserted here by the script */}
+        </div>
+        <div className="flex justify-center items-center mt-4">
+          <button
+            className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+            id="prev-card"
+          >
+            <i className="fas fa-chevron-left"></i>
+          </button>
+          <div className="flex mx-4" id="carousel-indicators">
+            {/* Indicator dots will be added dynamically */}
+          </div>
+          <button
+            className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+            id="next-card"
+          >
+            <i className="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <ResetButton
+        onClick={() => {
+          restart();
+        }}
+      />
+    </div>
+  );
+}
+
+function App() {
+  useEffect(() => {
+    run();
+  }, []);
+
+  return (
+    <LoadingProvider>
+      <MapContainer />
+      <Spinner />
+    </LoadingProvider>
+  );
+}
+
+const root = createRoot(document.getElementById("root")!);
+root.render(<App />);

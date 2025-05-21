@@ -20,99 +20,6 @@
     </script>
   </head>
   <body>
-    <!-- Main container for the map and related UI elements -->
-    <div
-      id="map-container"
-      class="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
-    >
-      <div id="map" class="h-full w-full"></div>
-
-      <!-- Container for search elements positioned at the top -->
-      <div
-        class="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]"
-      >
-        <!-- Toggle switch for enabling/disabling Day Planner Mode -->
-        <div
-          class="flex items-center mb-3 p-1 pr-3 bg-black/25 rounded-full w-max"
-        >
-          <label class="relative inline-block w-[46px] h-6">
-            <input
-              type="checkbox"
-              id="planner-mode-toggle"
-              class="opacity-0 w-0 h-0"
-            />
-            <span
-              class="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full"
-            ></span>
-          </label>
-          <span
-            class="ml-2.5 text-sm text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
-            >Day Planner Mode</span
-          >
-        </div>
-
-        <div
-          class="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
-        >
-          <i class="fas fa-search text-[#717171] mr-3"></i>
-          <textarea
-            id="prompt-input"
-            placeholder="Explore places, history, events, or routes..."
-            class="flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent text-black"
-          ></textarea>
-          <button
-            id="generate"
-            class="bg-[#282828] text-white border-none rounded-full w-8 h-8 flex items-center justify-center cursor-pointer ml-3 transition-colors duration-200 hover:bg-[#282828] relative"
-          >
-            <i class="fas fa-arrow-right transition-opacity duration-200"></i>
-            <div
-              class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[18px] h-[18px] border-2 border-white/30 rounded-full border-t-white animate-spin opacity-0 pointer-events-none transition-opacity duration-200"
-            ></div>
-          </button>
-        </div>
-
-        <div class="text-red py-4" id="error-message"></div>
-      </div>
-
-      <!-- Carousel for displaying location cards at the bottom -->
-      <div
-        class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300 ease-in-out"
-        id="card-carousel"
-      >
-        <div
-          class="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
-          id="card-container"
-        >
-          <!-- Location cards will be dynamically inserted here by the script -->
-        </div>
-        <div class="flex justify-center items-center mt-4">
-          <button
-            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
-            id="prev-card"
-          >
-            <i class="fas fa-chevron-left"></i>
-          </button>
-          <div class="flex mx-4" id="carousel-indicators">
-            <!-- Indicator dots will be added dynamically -->
-          </div>
-          <button
-            class="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
-            id="next-card"
-          >
-            <i class="fas fa-chevron-right"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- Button to reset the map and clear current results -->
-      <button
-        id="reset"
-        class="absolute bottom-8 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
-      >
-        <i class="fas fa-undo"></i>
-      </button>
-    </div>
-
     <!-- Semi-transparent overlay displayed when timeline is open on mobile -->
     <div class="fixed inset-0 bg-black/50 z-9 hidden" id="map-overlay"></div>
 
@@ -155,11 +62,6 @@
         <!-- Timeline items representing the day plan will be inserted here -->
       </div>
     </div>
-
-    <div
-      id="spinner"
-      class="absolute left-[calc(50%-25px)] top-[calc(50%-25px)] w-[50px] h-[50px] border-[5px] border-black/10 border-t-[#3498db] rounded-full pointer-events-none opacity-100 transition-opacity duration-1000 animate-spin hidden"
-    ></div>
 
     <!-- End of elements inside map-container -->
 
