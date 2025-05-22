@@ -5,6 +5,7 @@
 import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
 import React, {
   createContext,
+  HTMLAttributes,
   KeyboardEventHandler,
   PropsWithChildren,
   useCallback,
@@ -41,13 +42,22 @@ interface LocationInfo {
   content: HTMLElement;
   time: string;
   duration: string;
-  sequence: string;
+  sequence: number;
 }
 
 interface Point {
   lat: number;
   lng: number;
 }
+
+interface Line {
+  poly: google.maps.Polyline;
+  geodesicPoly: google.maps.Polyline;
+  name: string;
+  transport: string;
+  travelTime: string;
+}
+
 class Popup extends google.maps.OverlayView {
   position: google.maps.LatLng | google.maps.LatLngLiteral | null;
   containerDiv: HTMLElement;
@@ -104,7 +114,7 @@ class Popup extends google.maps.OverlayView {
 let map: google.maps.Map; // Holds the Google Map instance
 let points: Point[] = []; // Array to store geographical points from responses
 let markers: google.maps.marker.AdvancedMarkerElement[] = []; // Array to store map markers
-let lines = []; // Array to store polylines representing routes/connections
+let lines: Line[] = []; // Array to store polylines representing routes/connections
 let popUps: LocationInfo[] = []; // Array to store custom popups for locations
 let bounds: google.maps.LatLngBounds; // Google Maps LatLngBounds object to fit map around points
 let activeCardIndex = 0; // Index of the currently selected location card
@@ -385,13 +395,9 @@ function reset() {
 // Adds a pin (marker and popup) to the map for a given location.
 async function setPin(res: LocationFunctionResponse) {
   const point = createPointFromResponse(res);
-  points.push(point);
-  bounds.extend(point);
 
   const marker = createMarkerFromResponse(point, res);
-  markers.push(marker);
   map.panTo(point);
-  map.fitBounds(bounds);
 
   const content = document.createElement("div");
   let timeInfo = "";
@@ -411,25 +417,17 @@ async function setPin(res: LocationFunctionResponse) {
 
   const locationInfo = createLocationInfo(point, marker, content, popup, res);
 
-  popUps.push(locationInfo);
-
-  if (isPlannerMode && res.time) {
-    dayPlanItinerary.push(locationInfo);
-  }
+  return {
+    point,
+    marker,
+    locationInfo,
+  };
 }
 
 // Adds a line (route) between two locations on the map.
-async function setLeg(args: LineFunctionResponse) {
-  const start = {
-    lat: Number(args.start.lat),
-    lng: Number(args.start.lng),
-  };
-  const end = { lat: Number(args.end.lat), lng: Number(args.end.lng) };
-  points.push(start);
-  points.push(end);
-  bounds.extend(start);
-  bounds.extend(end);
-  map.fitBounds(bounds);
+async function setLeg(res: LineFunctionResponse) {
+  const start = createPointFromResponse(res.start);
+  const end = createPointFromResponse(res.end);
 
   const polyOptions = {
     strokeOpacity: 0.0, // Invisible base line
@@ -454,20 +452,28 @@ async function setLeg(args: LineFunctionResponse) {
     ];
   }
 
-  const poly = new google.maps.Polyline(polyOptions);
-  const geodesicPoly = new google.maps.Polyline(geodesicPolyOptions);
-
   const path = [start, end];
+
+  const poly = new google.maps.Polyline(polyOptions);
   poly.setPath(path);
+
+  const geodesicPoly = new google.maps.Polyline(geodesicPolyOptions);
   geodesicPoly.setPath(path);
 
-  lines.push({
+  const line: Line = {
     poly,
     geodesicPoly,
-    name: args.name,
-    transport: args.transport,
-    travelTime: args.travelTime,
-  });
+    name: res.name,
+    transport: res.transport,
+    travelTime: res.travelTime,
+  };
+
+  lines.push(line);
+
+  return {
+    points: [start, end],
+    line,
+  };
 }
 
 // Creates and populates the timeline view for the day plan.
@@ -981,29 +987,58 @@ function ErrorMessage({ children }: PropsWithChildren) {
   );
 }
 
-function LocationCardContainer({ children }: PropsWithChildren) {
+interface LocationCardContainerProps {
+  locations: LocationInfo[];
+  activeIndex: number;
+  setActiveIndex: (index: number) => void;
+}
+
+function LocationCardContainer({
+  locations,
+  activeIndex,
+  setActiveIndex,
+}: LocationCardContainerProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
   return (
     <div
       className="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
       id="card-container"
+      ref={ref}
     >
-      {children}
+      {locations.map((location, index) => (
+        <LocationCard
+          id={`card-${index}`}
+          key={index}
+          location={location}
+          active={index === activeIndex}
+          onClick={(e) => {
+            setActiveIndex(index);
+            map.panTo(location.position);
+            const card = e.target as HTMLDivElement;
+            card.scrollIntoView({
+              inline: "center",
+              block: "center",
+              behavior: "smooth",
+            });
+          }}
+        />
+      ))}
     </div>
   );
 }
 
-interface LocationCardProps {
-  index: number;
+interface LocationCardProps extends HTMLAttributes<HTMLDivElement> {
   location: LocationInfo;
   active: boolean;
-  setActiveIndex: (index: number) => void;
+  onClick: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 function LocationCard({
-  index,
   location,
   active,
-  setActiveIndex,
+  onClick,
+  ...props
 }: LocationCardProps) {
   const { plannerMode } = usePlannerMode();
 
@@ -1012,10 +1047,8 @@ function LocationCard({
       className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl mr-3 shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
         active ? "border-2 border-[#2196F3]" : ""
       }`}
-      onClick={() => {
-        setActiveIndex(index);
-        map.panTo(location.position);
-      }}
+      onClick={onClick}
+      {...props}
     >
       <div
         className="h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
@@ -1086,7 +1119,10 @@ function GoogleMap() {
 }
 
 function createPointFromResponse(
-  response: LocationFunctionResponse
+  response:
+    | LocationFunctionResponse
+    | LineFunctionResponse["start"]
+    | LineFunctionResponse["end"]
 ): google.maps.LatLngLiteral {
   return { lat: Number(response.lat), lng: Number(response.lng) };
 }
@@ -1128,7 +1164,7 @@ function createLocationInfo(
     content: content,
     time: response.time,
     duration: response.duration,
-    sequence: response.sequence,
+    sequence: Number(response.sequence),
   };
   return locationInfo;
 }
@@ -1152,17 +1188,20 @@ function MapContainer() {
 
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const [timelines, setTimelines] = useState<
-    {
-      time: string;
-      index: number;
-      name: string;
-      description: string;
-      duration: string;
-      sequence: string;
-    }[]
+  const [bounds, setBounds] = useState<google.maps.LatLngBounds>();
+  const [points, setPoints] = useState<google.maps.LatLngLiteral[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [markers, setMarkers] = useState<
+    google.maps.marker.AdvancedMarkerElement[]
   >([]);
   const [locations, setLocations] = useState<LocationInfo[]>([]);
+
+  useEffect(() => {
+    const card = document.getElementById(`card-${activeIndex}`);
+    if (card) {
+      card.click();
+    }
+  }, [activeIndex]);
 
   // Sends the user's prompt to the Google AI and processes the response.
   const sendText = useCallback(async (prompt: string) => {
@@ -1197,36 +1236,56 @@ function MapContainer() {
         },
       });
 
-      let results = false;
+      const bounds = new google.maps.LatLngBounds();
+      const points: google.maps.LatLngLiteral[] = [];
+      const lines: Line[] = [];
+      const markers: google.maps.marker.AdvancedMarkerElement[] = [];
+      const locations: LocationInfo[] = [];
       for await (const chunk of response) {
         const fns = chunk.functionCalls ?? [];
         for (const fn of fns) {
           if (fn.name === "location") {
-            await setPin(fn.args as unknown as LocationFunctionResponse);
-            results = true;
+            const { point, marker, locationInfo } = await setPin(
+              fn.args as unknown as LocationFunctionResponse
+            );
+            points.push(point);
+            markers.push(marker);
+            locations.push(locationInfo);
           }
           if (fn.name === "line") {
-            await setLeg(fn.args as unknown as LineFunctionResponse);
-            results = true;
+            const { points, line } = await setLeg(
+              fn.args as unknown as LineFunctionResponse
+            );
+            points.push(...points);
+            lines.push(line);
           }
         }
       }
 
-      console.log("results", results);
-      if (!results) {
+      if (points.length === 0) {
         throw new Error(
           "Could not generate any results. Try again, or try a different prompt."
         );
       }
 
-      setLocations(popUps);
-      if (plannerMode && dayPlanItinerary.length > 0) {
-        dayPlanItinerary.sort(
+      for (const point of points) {
+        bounds.extend(point);
+      }
+      map.fitBounds(bounds);
+
+      setBounds(bounds);
+      setPoints(points);
+      setLines(lines);
+      setMarkers(markers);
+      setLocations(locations);
+
+      if (plannerMode && locations.length > 0) {
+        locations.sort(
           (a, b) =>
             (a.sequence || Infinity) - (b.sequence || Infinity) ||
             (a.time || "").localeCompare(b.time || "")
         );
-        createTimeline(dayPlanItinerary);
+        createTimeline(locations);
         showTimeline();
       }
 
@@ -1243,12 +1302,12 @@ function MapContainer() {
 
   function createTimeline(dayPlanItinerary: LocationInfo[]) {
     if (dayPlanItinerary.length === 0) return;
-    setTimelines(
-      dayPlanItinerary.map((item, index) => ({
-        ...item,
-        index,
-      }))
-    );
+    // setTimelines(
+    //   dayPlanItinerary.map((item, index) => ({
+    //     ...item,
+    //     index,
+    //   }))
+    // );
 
     // dayPlanItinerary.forEach((item, index) => {
     //   const timelineItem = document.createElement("div");
@@ -1379,22 +1438,21 @@ function MapContainer() {
           }`}
           id="card-carousel"
         >
-          <LocationCardContainer>
-            {locations.map((location, index) => (
-              <LocationCard
-                key={index}
-                index={index}
-                location={location}
-                active={index === activeIndex}
-                setActiveIndex={setActiveIndex}
-              />
-            ))}
-          </LocationCardContainer>
+          <LocationCardContainer
+            locations={locations}
+            activeIndex={activeIndex}
+            setActiveIndex={setActiveIndex}
+          />
 
           <div className="flex justify-center items-center mt-4">
             <button
               className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
               id="prev-card"
+              onClick={() => {
+                setActiveIndex(
+                  (activeIndex - 1 + locations.length) % locations.length
+                );
+              }}
             >
               <i className="fas fa-chevron-left"></i>
             </button>
@@ -1406,6 +1464,9 @@ function MapContainer() {
             <button
               className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
               id="next-card"
+              onClick={() => {
+                setActiveIndex((activeIndex + 1) % locations.length);
+              }}
             >
               <i className="fas fa-chevron-right"></i>
             </button>
@@ -1450,10 +1511,10 @@ function MapContainer() {
           className="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
           id="timeline"
         >
-          {timelines.map((timeline) => (
+          {locations.map((location, index) => (
             <div className="flex my-4 relative">
               <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
-                {timeline.time ?? "Flexible"}
+                {location.time ?? "Flexible"}
               </div>
               <div className="flex-none w-5 flex flex-col items-center">
                 <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1"></div>
@@ -1461,17 +1522,17 @@ function MapContainer() {
               </div>
               <div
                 className="flex-1 bg-white rounded-lg p-3 shadow-sm border border-gray-200 cursor-pointer transition-all duration-200 hover:transform hover:-translate-y-0.5 hover:shadow-md data-[active=true]:border-l-4 data-[active=true]:border-l-blue-500"
-                data-index={timeline.index}
+                data-index={index}
               >
                 <div className="font-semibold text-sm mb-1 text-gray-800">
-                  {timeline.name}
+                  {location.name}
                 </div>
                 <div className="text-xs text-gray-600 leading-snug">
-                  {timeline.description}
+                  {location.description}
                 </div>
-                {timeline.duration && (
+                {location.duration && (
                   <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
-                    {timeline.duration}
+                    {location.duration}
                   </div>
                 )}
               </div>
