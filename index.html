@@ -23,47 +23,7 @@
     <!-- Semi-transparent overlay displayed when timeline is open on mobile -->
     <div class="fixed inset-0 bg-black/50 z-9 hidden" id="map-overlay"></div>
 
-    <!-- Sliding panel for displaying the day plan timeline -->
-    <div
-      class="fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden hidden transition-transform duration-300 ease-in-out"
-      id="timeline-container"
-    >
-      <!-- Button to toggle timeline visibility on mobile -->
-      <button
-        id="timeline-toggle"
-        class="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden"
-      >
-        <i class="fas fa-calendar-alt"></i>
-      </button>
-
-      <div
-        class="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2"
-      >
-        <h3 class="text-base font-semibold text-[#333]">Your Day Plan</h3>
-        <div class="flex gap-2">
-          <button
-            id="export-plan"
-            class="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
-          >
-            <i class="fas fa-download"></i> Export
-          </button>
-          <button
-            id="close-timeline"
-            class="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
-          >
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-      </div>
-      <div
-        class="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
-        id="timeline"
-      >
-        <!-- Timeline items representing the day plan will be inserted here -->
-      </div>
-    </div>
-
-    <!-- End of elements inside map-container -->
+    <div id="root"></div>
 
     <!-- Google Maps JavaScript API script -->
     <script>

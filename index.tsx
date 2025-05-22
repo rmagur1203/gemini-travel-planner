@@ -6,13 +6,22 @@ import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
 import React, {
   createContext,
   KeyboardEventHandler,
+  PropsWithChildren,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import ReactDOM from "react-dom";
 import { createRoot } from "react-dom/client";
-import { LoadingProvider, Spinner } from "./loading";
+import {
+  LoadingContext,
+  LoadingProvider,
+  Spinner,
+  useLoading,
+} from "./loading";
+import { usePlannerMode } from "./mode";
 
 const { Map } = (await google.maps.importLibrary(
   "maps"
@@ -24,16 +33,93 @@ const { AdvancedMarkerElement } = (await google.maps.importLibrary(
   "marker"
 )) as google.maps.MarkerLibrary;
 
+interface LocationInfo {
+  name: string;
+  description: string;
+  position: google.maps.LatLng;
+  popup: Popup;
+  content: HTMLElement;
+  time: string;
+  duration: string;
+  sequence: string;
+}
+
+interface Point {
+  lat: number;
+  lng: number;
+}
+class Popup extends google.maps.OverlayView {
+  position: google.maps.LatLng | google.maps.LatLngLiteral | null;
+  containerDiv: HTMLElement;
+  constructor(
+    position: google.maps.LatLng | google.maps.LatLngLiteral | null,
+    content: HTMLElement
+  ) {
+    super();
+    this.position = position;
+    content.classList.add("popup-bubble");
+
+    this.containerDiv = document.createElement("div");
+    this.containerDiv.classList.add("popup-container");
+    this.containerDiv.appendChild(content); // Append the actual content here
+    // Prevent clicks inside the popup from propagating to the map.
+    google.maps.OverlayView.preventMapHitsAndGesturesFrom(this.containerDiv);
+  }
+
+  /** Called when the popup is added to the map via setMap(). */
+  onAdd() {
+    this.getPanes()!.floatPane.appendChild(this.containerDiv);
+  }
+
+  /** Called when the popup is removed from the map via setMap(null). */
+  onRemove() {
+    if (this.containerDiv.parentElement) {
+      this.containerDiv.parentElement.removeChild(this.containerDiv);
+    }
+  }
+
+  /** Called each frame when the popup needs to draw itself. */
+  draw() {
+    const divPosition = this.getProjection().fromLatLngToDivPixel(
+      this.position
+    )!;
+    // Hide the popup when it is far out of view for performance.
+    const display =
+      Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000
+        ? "block"
+        : "none";
+
+    if (display === "block") {
+      this.containerDiv.style.left = divPosition.x + "px";
+      this.containerDiv.style.top = divPosition.y + "px";
+    }
+
+    if (this.containerDiv.style.display !== display) {
+      this.containerDiv.style.display = display;
+    }
+  }
+}
+
 // Application state variables
 let map: google.maps.Map; // Holds the Google Map instance
-let points = []; // Array to store geographical points from responses
-let markers = []; // Array to store map markers
+let points: Point[] = []; // Array to store geographical points from responses
+let markers: google.maps.marker.AdvancedMarkerElement[] = []; // Array to store map markers
 let lines = []; // Array to store polylines representing routes/connections
-let popUps = []; // Array to store custom popups for locations
+let popUps: LocationInfo[] = []; // Array to store custom popups for locations
 let bounds: google.maps.LatLngBounds; // Google Maps LatLngBounds object to fit map around points
 let activeCardIndex = 0; // Index of the currently selected location card
 let isPlannerMode = false; // Flag to indicate if Day Planner mode is active
-let dayPlanItinerary = []; // Array to hold structured items for the day plan timeline
+let dayPlanItinerary: LocationInfo[] = []; // Array to hold structured items for the day plan timeline
+
+interface LocationFunctionResponse {
+  name: string;
+  description: string;
+  lat: string;
+  lng: string;
+  time: string;
+  duration: string;
+  sequence: string;
+}
 
 // Function declaration for extracting location data using Google AI.
 const locationFunctionDeclaration: FunctionDeclaration = {
@@ -79,6 +165,13 @@ const locationFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
+interface LineFunctionResponse {
+  name: string;
+  start: { lat: string; lng: string };
+  end: { lat: string; lng: string };
+  transport: string;
+  travelTime: string;
+}
 // Function declaration for extracting route/line data using Google AI.
 const lineFunctionDeclaration: FunctionDeclaration = {
   name: "line",
@@ -196,10 +289,10 @@ Remember: In default mode, respond to ANY query by finding relevant locations to
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
 // Initializes the Google Map instance and necessary libraries.
-async function initMap() {
+async function initMap(mapElement: HTMLElement) {
   bounds = new LatLngBounds();
 
-  map = new Map(document.getElementById("map"), {
+  map = new Map(mapElement, {
     center: { lat: -34.397, lng: 150.644 }, // Default center
     zoom: 8, // Default zoom
     mapId: "4504f8b37365c3d0", // Custom map ID for styling
@@ -212,60 +305,6 @@ async function initMap() {
     rotateControl: false,
     fullscreenControl: false,
   });
-
-  // Define a custom Popup class extending Google Maps OverlayView.
-  // This allows for custom HTML content near map markers.
-  window.Popup = class Popup extends google.maps.OverlayView {
-    position: google.maps.LatLng | google.maps.LatLngLiteral | null;
-    containerDiv: HTMLElement;
-    constructor(
-      position: google.maps.LatLng | google.maps.LatLngLiteral | null,
-      content: HTMLElement
-    ) {
-      super();
-      this.position = position;
-      content.classList.add("popup-bubble");
-
-      this.containerDiv = document.createElement("div");
-      this.containerDiv.classList.add("popup-container");
-      this.containerDiv.appendChild(content); // Append the actual content here
-      // Prevent clicks inside the popup from propagating to the map.
-      Popup.preventMapHitsAndGesturesFrom(this.containerDiv);
-    }
-
-    /** Called when the popup is added to the map via setMap(). */
-    onAdd() {
-      this.getPanes()!.floatPane.appendChild(this.containerDiv);
-    }
-
-    /** Called when the popup is removed from the map via setMap(null). */
-    onRemove() {
-      if (this.containerDiv.parentElement) {
-        this.containerDiv.parentElement.removeChild(this.containerDiv);
-      }
-    }
-
-    /** Called each frame when the popup needs to draw itself. */
-    draw() {
-      const divPosition = this.getProjection().fromLatLngToDivPixel(
-        this.position
-      )!;
-      // Hide the popup when it is far out of view for performance.
-      const display =
-        Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000
-          ? "block"
-          : "none";
-
-      if (display === "block") {
-        this.containerDiv.style.left = divPosition.x + "px";
-        this.containerDiv.style.top = divPosition.y + "px";
-      }
-
-      if (this.containerDiv.style.display !== display) {
-        this.containerDiv.style.display = display;
-      }
-    }
-  };
 }
 
 // Functions to control the visibility of the timeline panel.
@@ -315,7 +354,8 @@ function adjustInterfaceForTimeline(isTimelineVisible: boolean) {
 }
 
 // Resets the map and application state to initial conditions.
-function restart() {
+function reset() {
+  return;
   points = [];
   bounds = new google.maps.LatLngBounds();
   dayPlanItinerary = [];
@@ -342,146 +382,44 @@ function restart() {
   if (timelineContainer) hideTimeline();
 }
 
-// Sends the user's prompt to the Google AI and processes the response.
-async function sendText(prompt: string) {
-  spinner.classList.remove("hidden");
-  errorMessage.innerHTML = "";
-  restart();
-  const buttonEl = document.getElementById("generate") as HTMLButtonElement;
-
-  try {
-    let finalPrompt = prompt;
-    if (isPlannerMode) {
-      finalPrompt = prompt + " day trip";
-    }
-
-    const updatedInstructions = isPlannerMode
-      ? systemInstructions.replace("DAY_PLANNER_MODE", "true")
-      : systemInstructions.replace("DAY_PLANNER_MODE", "false");
-
-    const response = await ai.models.generateContentStream({
-      model: "gemini-2.0-flash-exp",
-      contents: finalPrompt,
-      config: {
-        systemInstruction: updatedInstructions,
-        temperature: 1,
-        tools: [
-          {
-            functionDeclarations: [
-              locationFunctionDeclaration,
-              lineFunctionDeclaration,
-            ],
-          },
-        ],
-      },
-    });
-
-    let text = "";
-    let results = false;
-    for await (const chunk of response) {
-      const fns = chunk.functionCalls ?? [];
-      for (const fn of fns) {
-        if (fn.name === "location") {
-          await setPin(fn.args);
-          results = true;
-        }
-        if (fn.name === "line") {
-          await setLeg(fn.args);
-          results = true;
-        }
-      }
-
-      if (
-        chunk.candidates &&
-        chunk.candidates.length > 0 &&
-        chunk.candidates[0].content &&
-        chunk.candidates[0].content.parts
-      ) {
-        chunk.candidates[0].content.parts.forEach((part) => {
-          if (part.text) text += part.text;
-        });
-      } else if (chunk.text) {
-        text += chunk.text;
-      }
-    }
-
-    if (!results) {
-      throw new Error(
-        "Could not generate any results. Try again, or try a different prompt."
-      );
-    }
-
-    if (isPlannerMode && dayPlanItinerary.length > 0) {
-      dayPlanItinerary.sort(
-        (a, b) =>
-          (a.sequence || Infinity) - (b.sequence || Infinity) ||
-          (a.time || "").localeCompare(b.time || "")
-      );
-      createTimeline();
-      showTimeline();
-    }
-
-    createLocationCards();
-  } catch (e) {
-    errorMessage.innerHTML = e.message;
-    console.error("Error generating content:", e);
-  } finally {
-    buttonEl.classList.remove("loading");
-  }
-  spinner.classList.add("hidden");
-}
-
 // Adds a pin (marker and popup) to the map for a given location.
-async function setPin(args: Record<string, unknown> | undefined) {
-  const point = { lat: Number(args.lat), lng: Number(args.lng) };
+async function setPin(res: LocationFunctionResponse) {
+  const point = createPointFromResponse(res);
   points.push(point);
   bounds.extend(point);
 
-  const marker = new AdvancedMarkerElement({
-    map,
-    position: point,
-    title: args.name,
-  });
+  const marker = createMarkerFromResponse(point, res);
   markers.push(marker);
   map.panTo(point);
   map.fitBounds(bounds);
 
   const content = document.createElement("div");
   let timeInfo = "";
-  if (args.time) {
+  if (res.time) {
     timeInfo = `<div style="margin-top: 4px; font-size: 12px; color: #2196F3;">
-                  <i class="fas fa-clock"></i> ${args.time}
-                  ${args.duration ? ` • ${args.duration}` : ""}
+                  <i class="fas fa-clock"></i> ${res.time}
+                  ${res.duration ? ` • ${res.duration}` : ""}
                 </div>`;
   }
-  content.innerHTML = `<b>${args.name}</b><br/>${args.description}${timeInfo}`;
+  content.innerHTML = `<b>${res.name}</b><br/>${res.description}${timeInfo}`;
 
-  const popup = new window.Popup(new google.maps.LatLng(point), content);
+  const popup = createPopup(point, marker, content);
 
   if (!isPlannerMode) {
     popup.setMap(map);
   }
 
-  const locationInfo = {
-    name: args.name,
-    description: args.description,
-    position: new google.maps.LatLng(point),
-    popup,
-    content,
-    time: args.time,
-    duration: args.duration,
-    sequence: args.sequence,
-  };
+  const locationInfo = createLocationInfo(point, marker, content, popup, res);
 
   popUps.push(locationInfo);
 
-  if (isPlannerMode && args.time) {
+  if (isPlannerMode && res.time) {
     dayPlanItinerary.push(locationInfo);
   }
 }
 
 // Adds a line (route) between two locations on the map.
-async function setLeg(args: Record<string, unknown> | undefined) {
+async function setLeg(args: LineFunctionResponse) {
   const start = {
     lat: Number(args.start.lat),
     lng: Number(args.start.lng),
@@ -533,7 +471,7 @@ async function setLeg(args: Record<string, unknown> | undefined) {
 }
 
 // Creates and populates the timeline view for the day plan.
-function createTimeline() {
+function createTimeline(timeline: HTMLElement) {
   if (!timeline || dayPlanItinerary.length === 0) return;
   timeline.innerHTML = "";
 
@@ -901,9 +839,9 @@ async function run() {
   //   }, 10);
   // });
 
-  resetButton.addEventListener("click", (e) => {
-    restart();
-  });
+  // resetButton.addEventListener("click", (e) => {
+  //   restart();
+  // });
 
   if (prevCardButton) {
     prevCardButton.addEventListener("click", () => {
@@ -917,18 +855,18 @@ async function run() {
     });
   }
 
-  if (plannerModeToggle) {
-    plannerModeToggle.addEventListener("change", () => {
-      isPlannerMode = plannerModeToggle.checked;
-      promptInput.placeholder = isPlannerMode
-        ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
-        : "Explore places, history, events, or ask about any location...";
+  // if (plannerModeToggle) {
+  //   plannerModeToggle.addEventListener("change", () => {
+  //     isPlannerMode = plannerModeToggle.checked;
+  //     promptInput.placeholder = isPlannerMode
+  //       ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
+  //       : "Explore places, history, events, or ask about any location...";
 
-      if (!isPlannerMode && timelineContainer) {
-        hideTimeline();
-      }
-    });
-  }
+  //     if (!isPlannerMode && timelineContainer) {
+  //       hideTimeline();
+  //     }
+  //   });
+  // }
 
   if (closeTimelineButton) {
     closeTimelineButton.addEventListener("click", () => {
@@ -981,15 +919,16 @@ function ModeToggle({ isPlannerMode, setPlannerMode }: ModeToggleProps) {
 }
 
 interface PromptInputProps {
+  placeholder: string;
   setPrompt: (prompt: string) => void;
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
 }
 
-function PromptInput({ setPrompt, onKeyDown }: PromptInputProps) {
+function PromptInput({ placeholder, setPrompt, onKeyDown }: PromptInputProps) {
   return (
     <textarea
       id="prompt-input"
-      placeholder="Explore places, history, events, or routes..."
+      placeholder={placeholder}
       className="flex-1 border-none outline-none text-base resize-none h-6 leading-6 bg-transparent text-black"
       onChange={(e) => setPrompt(e.target.value)}
       onKeyDown={onKeyDown}
@@ -1034,92 +973,513 @@ function ResetButton({ onClick }: ResetButtonProps) {
   );
 }
 
-function GoogleMap() {
-  useEffect(() => {
-    initMap();
-  }, []);
-
-  return <div id="map" className="h-full w-full"></div>;
+function ErrorMessage({ children }: PropsWithChildren) {
+  return (
+    <div className="text-red py-4" id="error-message">
+      {children}
+    </div>
+  );
 }
 
-function MapContainer() {
-  const [prompt, setPrompt] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [isPlannerMode, setPlannerMode] = useState(false);
+function LocationCardContainer({ children }: PropsWithChildren) {
+  return (
+    <div
+      className="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
+      id="card-container"
+    >
+      {children}
+    </div>
+  );
+}
+
+interface LocationCardProps {
+  index: number;
+  location: LocationInfo;
+  active: boolean;
+  setActiveIndex: (index: number) => void;
+}
+
+function LocationCard({
+  index,
+  location,
+  active,
+  setActiveIndex,
+}: LocationCardProps) {
+  const { plannerMode } = usePlannerMode();
 
   return (
     <div
-      id="map-container"
-      className="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
+      className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl mr-3 shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
+        active ? "border-2 border-[#2196F3]" : ""
+      }`}
+      onClick={() => {
+        setActiveIndex(index);
+        map.panTo(location.position);
+      }}
     >
-      <GoogleMap />
+      <div
+        className="h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
+        style={{
+          backgroundImage: `url(${getPlaceholderImage(location.name)})`,
+        }}
+      ></div>
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]">
-        <ModeToggle
-          isPlannerMode={isPlannerMode}
-          setPlannerMode={setPlannerMode}
-        />
+      {plannerMode && location.sequence && (
+        <div className="absolute top-[10px] left-[10px] bg-[#2196F3] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold z-[2] shadow-md">
+          {location.sequence}
+        </div>
+      )}
 
-        <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
-          <i className="fas fa-search text-[#717171] mr-3"></i>
-          <PromptInput
-            setPrompt={setPrompt}
-            onKeyDown={(e) => {
-              if (e.code === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.stopPropagation();
+      {plannerMode && location.time && (
+        <div className="absolute top-[10px] right-[10px] bg-black/70 text-white py-1 px-2 rounded-2xl text-xs font-medium z-[2]">
+          {location.time}
+        </div>
+      )}
+
+      <div className="p-3">
+        <h3 className="text-base font-semibold mb-1 text-[#222222]">
+          {location.name}
+        </h3>
+        <p className="text-xs text-[#717171] mb-1 overflow-hidden text-ellipsis line-clamp-2 leading-snug">
+          {location.description}
+        </p>
+
+        {plannerMode && location.duration && (
+          <div className="inline-block text-xs text-[#2196F3] bg-[#e3f2fd] px-1.5 py-0.5 rounded mt-1">
+            {location.duration}
+          </div>
+        )}
+
+        <div className="text-[10px] text-[#999]">
+          {location.position.lat().toFixed(5)},{" "}
+          {location.position.lng().toFixed(5)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface CarouselIndicatorProps {
+  active: boolean;
+}
+
+function CarouselIndicator({ active }: CarouselIndicatorProps) {
+  return (
+    <div
+      className={`w-2 h-2 rounded-full mx-1 transition-colors duration-200 ${
+        active ? "bg-[#222222]" : "bg-[#DDDDDD]"
+      }`}
+    ></div>
+  );
+}
+
+function GoogleMap() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      initMap(ref.current);
+    }
+  }, [ref.current]);
+
+  return <div ref={ref} id="map" className="h-full w-full"></div>;
+}
+
+function createPointFromResponse(
+  response: LocationFunctionResponse
+): google.maps.LatLngLiteral {
+  return { lat: Number(response.lat), lng: Number(response.lng) };
+}
+
+function createMarkerFromResponse(
+  point: google.maps.LatLngLiteral,
+  response: LocationFunctionResponse
+): google.maps.marker.AdvancedMarkerElement {
+  return new AdvancedMarkerElement({
+    map,
+    position: point,
+    title: response.name,
+  });
+}
+
+function createPopup(
+  point: google.maps.LatLngLiteral,
+  marker: google.maps.marker.AdvancedMarkerElement,
+  content: HTMLElement
+): Popup {
+  return new Popup(new google.maps.LatLng(point), content);
+}
+
+function createLocationInfo(
+  point: google.maps.LatLngLiteral,
+  marker: google.maps.marker.AdvancedMarkerElement,
+  content: HTMLElement,
+  popup: Popup,
+  response: LocationFunctionResponse
+): LocationInfo {
+  const locationInfo: LocationInfo = {
+    name: response.name,
+    description: response.description,
+    position: new google.maps.LatLng(
+      Number(response.lat),
+      Number(response.lng)
+    ),
+    popup: popup,
+    content: content,
+    time: response.time,
+    duration: response.duration,
+    sequence: response.sequence,
+  };
+  return locationInfo;
+}
+
+interface TimelineItem {
+  time: string;
+  index: number;
+  name: string;
+  description: string;
+  duration: string;
+  sequence: string;
+}
+
+function MapContainer() {
+  const { setLoading } = useLoading();
+  const { plannerMode, setPlannerMode } = usePlannerMode();
+
+  const [prompt, setPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const [timelines, setTimelines] = useState<
+    {
+      time: string;
+      index: number;
+      name: string;
+      description: string;
+      duration: string;
+      sequence: string;
+    }[]
+  >([]);
+  const [locations, setLocations] = useState<LocationInfo[]>([]);
+
+  // Sends the user's prompt to the Google AI and processes the response.
+  const sendText = useCallback(async (prompt: string) => {
+    setLoading(true);
+    setErrorMessage("");
+    reset();
+
+    try {
+      let finalPrompt = prompt;
+      if (plannerMode) {
+        finalPrompt = prompt + " day trip";
+      }
+
+      const updatedInstructions = plannerMode
+        ? systemInstructions.replace("DAY_PLANNER_MODE", "true")
+        : systemInstructions.replace("DAY_PLANNER_MODE", "false");
+
+      const response = await ai.models.generateContentStream({
+        model: "gemini-2.0-flash-exp",
+        contents: finalPrompt,
+        config: {
+          systemInstruction: updatedInstructions,
+          temperature: 1,
+          tools: [
+            {
+              functionDeclarations: [
+                locationFunctionDeclaration,
+                lineFunctionDeclaration,
+              ],
+            },
+          ],
+        },
+      });
+
+      let results = false;
+      for await (const chunk of response) {
+        const fns = chunk.functionCalls ?? [];
+        for (const fn of fns) {
+          if (fn.name === "location") {
+            await setPin(fn.args as unknown as LocationFunctionResponse);
+            results = true;
+          }
+          if (fn.name === "line") {
+            await setLeg(fn.args as unknown as LineFunctionResponse);
+            results = true;
+          }
+        }
+      }
+
+      console.log("results", results);
+      if (!results) {
+        throw new Error(
+          "Could not generate any results. Try again, or try a different prompt."
+        );
+      }
+
+      setLocations(popUps);
+      if (plannerMode && dayPlanItinerary.length > 0) {
+        dayPlanItinerary.sort(
+          (a, b) =>
+            (a.sequence || Infinity) - (b.sequence || Infinity) ||
+            (a.time || "").localeCompare(b.time || "")
+        );
+        createTimeline(dayPlanItinerary);
+        showTimeline();
+      }
+
+      // createLocationCards();
+    } catch (e) {
+      setErrorMessage(e.message);
+      console.error("Error generating content:", e);
+    } finally {
+      setGenerating(false);
+    }
+
+    setLoading(false);
+  }, []);
+
+  function createTimeline(dayPlanItinerary: LocationInfo[]) {
+    if (dayPlanItinerary.length === 0) return;
+    setTimelines(
+      dayPlanItinerary.map((item, index) => ({
+        ...item,
+        index,
+      }))
+    );
+
+    // dayPlanItinerary.forEach((item, index) => {
+    //   const timelineItem = document.createElement("div");
+    //   timelineItem.className = "timeline-item";
+    //   const timeDisplay = item.time || "Flexible";
+
+    //   timelineItem.innerHTML = `
+    //   <div class="timeline-time">${timeDisplay}</div>
+    //   <div class="timeline-connector">
+    //     <div class="timeline-dot"></div>
+    //     <div class="timeline-line"></div>
+    //   </div>
+    //   <div class="timeline-content" data-index="${index}">
+    //     <div class="timeline-title">${item.name}</div>
+    //     <div class="timeline-description">${item.description}</div>
+    //     ${
+    //       item.duration
+    //         ? `<div class="timeline-duration">${item.duration}</div>`
+    //         : ""
+    //     }
+    //   </div>
+    // `;
+
+    //   const timelineContent = timelineItem.querySelector(".timeline-content");
+    //   if (timelineContent) {
+    //     timelineContent.addEventListener("click", () => {
+    //       const popupIndex = popUps.findIndex((p) => p.name === item.name);
+    //       if (popupIndex !== -1) {
+    //         highlightCard(popupIndex);
+    //         map.panTo(popUps[popupIndex].position);
+    //       }
+    //     });
+    //   }
+    //   timeline.appendChild(timelineItem);
+    // });
+
+    // if (lines.length > 0 && isPlannerMode) {
+    //   const timelineItems = timeline.querySelectorAll(".timeline-item");
+    //   for (let i = 0; i < timelineItems.length - 1; i++) {
+    //     const currentItem = dayPlanItinerary[i];
+    //     const nextItem = dayPlanItinerary[i + 1];
+    //     const connectingLine = lines.find(
+    //       (line) =>
+    //         line.name.includes(currentItem.name) ||
+    //         line.name.includes(nextItem.name)
+    //     );
+
+    //     if (
+    //       connectingLine &&
+    //       (connectingLine.transport || connectingLine.travelTime)
+    //     ) {
+    //       const transportItem = document.createElement("div");
+    //       transportItem.className = "timeline-item transport-item";
+    //       transportItem.innerHTML = `
+    //       <div class="timeline-time"></div>
+    //       <div class="timeline-connector">
+    //         <div class="timeline-dot" style="background-color: #999;"></div>
+    //         <div class="timeline-line"></div>
+    //       </div>
+    //       <div class="timeline-content transport">
+    //         <div class="timeline-title">
+    //           <i class="fas fa-${getTransportIcon(
+    //             connectingLine.transport || "travel"
+    //           )}"></i>
+    //           ${connectingLine.transport || "Travel"}
+    //         </div>
+    //         <div class="timeline-description">${connectingLine.name}</div>
+    //         ${
+    //           connectingLine.travelTime
+    //             ? `<div class="timeline-duration">${connectingLine.travelTime}</div>`
+    //             : ""
+    //         }
+    //       </div>
+    //     `;
+    //       timelineItems[i].after(transportItem);
+    //     }
+    //   }
+    // }
+  }
+
+  return (
+    <>
+      <div
+        id="map-container"
+        className="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
+      >
+        <GoogleMap />
+
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]">
+          <ModeToggle
+            isPlannerMode={plannerMode}
+            setPlannerMode={setPlannerMode}
+          />
+
+          <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
+            <i className="fas fa-search text-[#717171] mr-3"></i>
+            <PromptInput
+              placeholder={
+                plannerMode
+                  ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
+                  : "Explore places, history, events, or ask about any location..."
+              }
+              setPrompt={setPrompt}
+              onKeyDown={(e) => {
+                if (e.keyCode === 13 && !e.shiftKey) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setGenerating(true);
+                  sendText(prompt);
+                }
+              }}
+            />
+            <GenerateButton
+              loading={generating}
+              onClick={() => {
                 setGenerating(true);
                 sendText(prompt);
-              }
-            }}
-          />
-          <GenerateButton
-            loading={generating}
-            onClick={() => {
-              setGenerating(true);
-              sendText(prompt);
-            }}
-          />
-        </div>
-
-        <div className="text-red py-4" id="error-message"></div>
-      </div>
-
-      <div
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] hidden transition-all duration-300 ease-in-out"
-        id="card-carousel"
-      >
-        <div
-          className="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
-          id="card-container"
-        >
-          {/* Location cards will be dynamically inserted here by the script */}
-        </div>
-        <div className="flex justify-center items-center mt-4">
-          <button
-            className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
-            id="prev-card"
-          >
-            <i className="fas fa-chevron-left"></i>
-          </button>
-          <div className="flex mx-4" id="carousel-indicators">
-            {/* Indicator dots will be added dynamically */}
+              }}
+            />
           </div>
-          <button
-            className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
-            id="next-card"
-          >
-            <i className="fas fa-chevron-right"></i>
-          </button>
+
+          <ErrorMessage>{errorMessage}</ErrorMessage>
+        </div>
+
+        <div
+          className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] transition-all duration-300 ease-in-out ${
+            locations.length === 0 ? "hidden" : ""
+          }`}
+          id="card-carousel"
+        >
+          <LocationCardContainer>
+            {locations.map((location, index) => (
+              <LocationCard
+                key={index}
+                index={index}
+                location={location}
+                active={index === activeIndex}
+                setActiveIndex={setActiveIndex}
+              />
+            ))}
+          </LocationCardContainer>
+
+          <div className="flex justify-center items-center mt-4">
+            <button
+              className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+              id="prev-card"
+            >
+              <i className="fas fa-chevron-left"></i>
+            </button>
+            <div className="flex mx-4" id="carousel-indicators">
+              {locations.map((location, index) => (
+                <CarouselIndicator key={index} active={index === activeIndex} />
+              ))}
+            </div>
+            <button
+              className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+              id="next-card"
+            >
+              <i className="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <ResetButton
+          onClick={() => {
+            reset();
+          }}
+        />
+      </div>
+      <div
+        className="fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden hidden transition-transform duration-300 ease-in-out"
+        id="timeline-container"
+      >
+        <button
+          id="timeline-toggle"
+          className="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden"
+        >
+          <i className="fas fa-calendar-alt"></i>
+        </button>
+
+        <div className="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2">
+          <h3 className="text-base font-semibold text-[#333]">Your Day Plan</h3>
+          <div className="flex gap-2">
+            <button
+              id="export-plan"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+            >
+              <i className="fas fa-download"></i> Export
+            </button>
+            <button
+              id="close-timeline"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        <div
+          className="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
+          id="timeline"
+        >
+          {timelines.map((timeline) => (
+            <div className="flex my-4 relative">
+              <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
+                {timeline.time ?? "Flexible"}
+              </div>
+              <div className="flex-none w-5 flex flex-col items-center">
+                <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1"></div>
+                <div className="w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] left-[89px] z-0 last:hidden"></div>
+              </div>
+              <div
+                className="flex-1 bg-white rounded-lg p-3 shadow-sm border border-gray-200 cursor-pointer transition-all duration-200 hover:transform hover:-translate-y-0.5 hover:shadow-md data-[active=true]:border-l-4 data-[active=true]:border-l-blue-500"
+                data-index={timeline.index}
+              >
+                <div className="font-semibold text-sm mb-1 text-gray-800">
+                  {timeline.name}
+                </div>
+                <div className="text-xs text-gray-600 leading-snug">
+                  {timeline.description}
+                </div>
+                {timeline.duration && (
+                  <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
+                    {timeline.duration}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-
-      <ResetButton
-        onClick={() => {
-          restart();
-        }}
-      />
-    </div>
+    </>
   );
 }
 

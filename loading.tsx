@@ -30,3 +30,7 @@ export function LoadingProvider({ children }: { children: React.ReactNode }) {
     </LoadingContext.Provider>
   );
 }
+
+export function useLoading() {
+  return useContext(LoadingContext);
+}
