@@ -37,6 +37,7 @@ interface LocationInfo {
   time: string;
   duration: string;
   sequence: number;
+  day: number;
 }
 
 interface TransportInfo {
@@ -45,6 +46,7 @@ interface TransportInfo {
   end: string;
   transport: string;
   travelTime: string;
+  day: number;
 }
 
 interface ChatMessage {
@@ -65,6 +67,7 @@ interface Line {
   name: string;
   transport: string;
   travelTime: string;
+  day: number;
 }
 
 class Popup extends google.maps.OverlayView {
@@ -140,9 +143,18 @@ interface LocationFunctionResponse {
   time: string;
   duration: string;
   sequence: string;
+  day: string;
 }
 
-// Function declaration for extracting location data using Google AI.
+interface LineFunctionResponse {
+  name: string;
+  start: { name: string; lat: string; lng: string };
+  end: { name: string; lat: string; lng: string };
+  transport: string;
+  travelTime: string;
+  day: string;
+}
+
 const locationFunctionDeclaration: FunctionDeclaration = {
   name: "location",
   parameters: {
@@ -175,20 +187,16 @@ const locationFunctionDeclaration: FunctionDeclaration = {
       },
       sequence: {
         type: Type.NUMBER,
-        description: "하루 일정에서의 순서 (1 = 하루의 첫 번째 장소)",
+        description: "해당 날짜 일정에서의 순서 (1 = 그 날의 첫 번째 장소)",
+      },
+      day: {
+        type: Type.NUMBER,
+        description: "여행 일차 (1 = 첫째 날, 2 = 둘째 날)",
       },
     },
-    required: ["name", "description", "lat", "lng"],
+    required: ["name", "description", "lat", "lng", "day"],
   },
 };
-
-interface LineFunctionResponse {
-  name: string;
-  start: { name: string; lat: string; lng: string };
-  end: { name: string; lat: string; lng: string };
-  transport: string;
-  travelTime: string;
-}
 
 const lineFunctionDeclaration: FunctionDeclaration = {
   name: "line",
@@ -244,8 +252,12 @@ const lineFunctionDeclaration: FunctionDeclaration = {
         type: Type.STRING,
         description: '위치 간 예상 이동 시간 (예: "15분", "1시간")',
       },
+      day: {
+        type: Type.NUMBER,
+        description: "여행 일차 (1 = 첫째 날, 2 = 둘째 날)",
+      },
     },
-    required: ["name", "start", "end"],
+    required: ["name", "start", "end", "day"],
   },
 };
 
@@ -264,39 +276,47 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
    * 문화적 관심 지점
    * 여행 경로 및 교통 수단
 
-2. **데이 플래너 모드:**
-   * 다음을 포함한 상세한 하루 일정표 생성:
-     * 하루 동안 방문할 논리적인 위치 순서 (사용자가 원하는 만큼 많은 장소를 포함할 수 있음)
+2. **여행 플래너 모드:**
+   * 다음을 포함한 상세한 여행 일정표 생성:
+     * 하루 또는 여러 날 동안 방문할 논리적인 위치 순서
      * 각 위치 방문을 위한 구체적인 시간과 현실적인 체류 시간
      * 적절한 교통수단을 사용한 위치 간 이동 경로
      * 이동 시간, 식사 시간, 방문 시간을 고려한 균형 잡힌 일정
      * 각 위치는 '시간'(예: "09:00")과 '지속시간' 속성을 포함해야 함
-     * 각 위치는 순서를 나타내는 '순번' 번호(1, 2, 3 등)를 포함해야 함
-     * 위치를 연결하는 각 라인은 '교통수단'과 '이동시간' 속성을 포함해야 함
+     * 각 위치는 해당 날짜에서의 순서를 나타내는 '순번' 번호(1, 2, 3 등)를 포함해야 함
+     * 각 위치는 '일차' 번호(1 = 첫째 날, 2 = 둘째 날 등)를 포함해야 함
+     * 위치를 연결하는 각 라인은 '교통수단', '이동시간', '일차' 속성을 포함해야 함
+     * 여러 날 여행의 경우 날짜별로 논리적이고 현실적인 일정 구성
 
 3. **대화형 계획 수정:**
    * 사용자의 후속 요청에 따라 기존 계획을 수정할 수 있습니다
-   * "시간을 더 늘려줘", "첫 번째 장소를 바꿔줘", "맛집을 더 추가해줘" 등의 요청 처리
+   * "시간을 더 늘려줘", "첫째 날 일정을 바꿔줘", "하루 더 추가해줘" 등의 요청 처리
    * **절대 중요**: 어떤 수정 요청이라도 반드시 완전한 새 계획을 다시 제공해야 합니다
    * 부분적인 응답이나 일부 위치만 제공하는 것은 절대 금지됩니다
    * 기존 대화 맥락을 고려하여 사용자의 의도를 정확히 파악
 
 **출력 형식:**
 
-* **필수**: 모든 응답에서 완전한 하루 일정의 모든 위치에 대해 "location" 함수를 호출해야 합니다
+* **필수**: 모든 응답에서 완전한 여행 일정의 모든 위치에 대해 "location" 함수를 호출해야 합니다
 * **필수**: 모든 위치 간 연결에 대해 "line" 함수를 호출해야 합니다
-* 필수 시간, 지속시간, 순번 속성과 함께 각 정거장에 대해 "location" 함수 사용
-* 교통수단과 이동시간 속성과 함께 정거장들을 연결하기 위해 "line" 함수 사용
-* 현실적인 시간 배정으로 논리적인 순서로 하루 일정 구성
+* 필수 시간, 지속시간, 순번, 일차 속성과 함께 각 정거장에 대해 "location" 함수 사용
+* 교통수단, 이동시간, 일차 속성과 함께 정거장들을 연결하기 위해 "line" 함수 사용
+* 현실적인 시간 배정으로 논리적인 순서로 일정 구성
 * 각 위치에서 할 일에 대한 구체적인 세부사항 포함
 * **절대 중요**: 계획 수정 시에도 항상 완전한 location과 line 함수 호출을 통해 전체 계획을 다시 생성
+
+**여행 일정 규칙:**
+* 하루 여행: 오전 6시 이후 시작, 오후 12시 이전 종료
+* 여러 날 여행: 첫째 날은 도착 시간 고려, 마지막 날은 출발 시간 고려
+* 각 날은 적절한 수의 장소로 구성 (과도하지 않게)
+* 숙박 시설이나 호텔도 위치로 포함 가능
+* 날짜 간 이동은 별도의 교통편으로 표시
 
 **중요한 지침:**
 * 모든 질의에 대해 location 함수를 통해 항상 지리적 데이터를 제공하세요
 * 특정 위치에 대해 확실하지 않은 경우, 최선의 판단으로 좌표를 제공하세요
 * 질문이나 명확화 요청만으로 답변하지 마세요
 * 복잡하거나 추상적인 질의라도 항상 시각적으로 지도에 매핑하려고 시도하세요
-* 데이 플랜의 경우, 오전 6시 이전에 시작하지 않고 오후 12시까지 끝나는 현실적인 일정을 만드세요
 * **절대 중요**: 대화 중 계획 수정 요청이 있을 경우, 수정된 전체 계획을 location과 line 함수로 완전히 다시 생성하세요
 * 부분적인 함수 호출이나 일부 위치만 제공하는 것은 절대 허용되지 않습니다
 
@@ -306,13 +326,16 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
 * 텍스트로만 설명하고 함수 호출 없이 응답하는 것
 * 불완전한 계획이나 부분적인 계획 제공
 
-기억하세요: 구조화된 하루 일정표를 생성하여 각 위치에 시간과 순서를 포함하고, 위치 간 이동 방법도 명시하세요. 계획 수정 시에는 텍스트 설명과 함께 반드시 모든 위치와 모든 경로에 대해 location과 line 함수를 호출하여 완전한 지도를 업데이트하세요.`;
+기억하세요: 구조화된 여행 일정표를 생성하여 각 위치에 시간, 순서, 일차를 포함하고, 위치 간 이동 방법도 명시하세요. 계획 수정 시에는 텍스트 설명과 함께 반드시 모든 위치와 모든 경로에 대해 location과 line 함수를 호출하여 완전한 지도를 업데이트하세요.`;
 
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
 async function initMap(mapElement: HTMLElement) {
+  // 기본 중심점을 서울로 설정 (안전한 좌표)
+  const defaultCenter = { lat: 37.5665, lng: 126.978 };
+
   map = new Map(mapElement, {
-    center: { lat: -34.397, lng: 150.644 },
+    center: defaultCenter,
     zoom: 8,
     mapId: "4504f8b37365c3d0",
     gestureHandling: "greedy",
@@ -333,8 +356,31 @@ async function initMap(mapElement: HTMLElement) {
 // Adds a pin (marker and popup) to the map for a given location.
 async function setPin(res: LocationFunctionResponse) {
   const point = createPointFromResponse(res);
+
+  // 좌표 유효성 재검증
+  if (
+    isNaN(point.lat) ||
+    isNaN(point.lng) ||
+    !isFinite(point.lat) ||
+    !isFinite(point.lng)
+  ) {
+    console.error(
+      "Invalid point coordinates for setPin:",
+      point,
+      "from response:",
+      res
+    );
+    throw new Error(`Invalid coordinates for location: ${res.name}`);
+  }
+
   const marker = createMarkerFromResponse(point, res);
-  map.panTo(point);
+
+  // 안전하게 지도 중심 이동
+  try {
+    map.panTo(point);
+  } catch (error) {
+    console.error("Error panning to point:", error, point);
+  }
 
   const content = document.createElement("div");
 
@@ -344,19 +390,23 @@ async function setPin(res: LocationFunctionResponse) {
 
   let timeInfo = "";
   if (res.time) {
-    timeInfo = `<div class="flex items-center mt-2 text-sm text-blue-500">
-                  <i class="fas fa-clock mr-1"></i> 
-                  <span>${res.time}${
-      res.duration ? ` • ${res.duration}` : ""
-    }</span>
-                </div>`;
+    timeInfo += `<p class="text-sm"><span class="font-semibold">방문 시간:</span> ${res.time}</p>`;
+  }
+  if (res.duration) {
+    timeInfo += `<p class="text-sm"><span class="font-semibold">권장 체류 시간:</span> ${res.duration}</p>`;
+  }
+  if (res.sequence) {
+    timeInfo += `<p class="text-sm"><span class="font-semibold">순서:</span> ${res.sequence}번째</p>`;
+  }
+  if (res.day) {
+    timeInfo += `<p class="text-sm"><span class="font-semibold">여행 일차:</span> ${res.day}일차</p>`;
   }
 
   content.innerHTML = `
-    <div class="space-y-2">
-      <h3 class="font-bold text-lg text-gray-900 leading-tight">${res.name}</h3>
-      <p class="text-sm text-gray-600 leading-relaxed">${res.description}</p>
-      ${timeInfo}
+    <div class="popup-content">
+      <h3 class="text-lg font-bold mb-2">${res.name}</h3>
+      <p class="text-sm text-gray-600 mb-3">${res.description}</p>
+      ${timeInfo ? `<div class="border-t pt-2">${timeInfo}</div>` : ""}
     </div>
   `;
 
@@ -378,6 +428,26 @@ async function setPin(res: LocationFunctionResponse) {
 async function setLeg(res: LineFunctionResponse) {
   const start = createPointFromResponse(res.start);
   const end = createPointFromResponse(res.end);
+
+  // 시작점과 끝점 좌표 유효성 검사
+  if (
+    isNaN(start.lat) ||
+    isNaN(start.lng) ||
+    !isFinite(start.lat) ||
+    !isFinite(start.lng) ||
+    isNaN(end.lat) ||
+    isNaN(end.lng) ||
+    !isFinite(end.lat) ||
+    !isFinite(end.lng)
+  ) {
+    console.error(
+      "Invalid coordinates for line:",
+      { start, end },
+      "from response:",
+      res
+    );
+    throw new Error(`Invalid coordinates for route: ${res.name}`);
+  }
 
   console.log(
     "Setting leg from",
@@ -483,6 +553,7 @@ async function setLeg(res: LineFunctionResponse) {
         name: res.name,
         transport: res.transport,
         travelTime: res.travelTime,
+        day: Number(res.day),
       };
 
       const transport = createTransportInfo(res);
@@ -552,6 +623,7 @@ async function setLegFallback(
     name: res.name,
     transport: res.transport,
     travelTime: res.travelTime,
+    day: Number(res.day),
   };
 
   const transport = createTransportInfo(res);
@@ -840,34 +912,122 @@ function LocationCardContainer({
   activeIndex,
   setActiveIndex,
 }: LocationCardContainerProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  // 날짜별로 위치 그룹화
+  const dayGroups = locations.reduce(
+    (groups: { [key: number]: LocationInfo[] }, location) => {
+      const day = location.day;
+      if (!groups[day]) {
+        groups[day] = [];
+      }
+      groups[day].push(location);
+      return groups;
+    },
+    {}
+  );
+
+  // 날짜 순으로 정렬
+  const sortedDays = Object.keys(dayGroups)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  // 현재 활성 위치의 날짜 확인
+  const currentActiveLocation = locations[activeIndex];
+  const currentDay =
+    currentActiveLocation?.day || (sortedDays.length > 0 ? sortedDays[0] : 1);
+
+  // 현재 날짜의 위치들만 필터링
+  const currentDayLocations = dayGroups[currentDay]
+    ? dayGroups[currentDay].sort((a, b) => a.sequence - b.sequence)
+    : [];
+
+  // 현재 날짜에서의 활성 인덱스 계산
+  const activeIndexInCurrentDay =
+    currentActiveLocation && currentActiveLocation.day === currentDay
+      ? currentDayLocations.findIndex(
+          (loc) =>
+            loc.name === currentActiveLocation.name &&
+            loc.sequence === currentActiveLocation.sequence
+        )
+      : 0;
+
+  const [currentDayState, setCurrentDayState] = useState(currentDay);
+
+  // 날짜가 변경될 때 첫 번째 위치로 이동
+  const handleDayChange = (newDay: number) => {
+    setCurrentDayState(newDay);
+    const firstLocationOfDay = dayGroups[newDay]?.sort(
+      (a, b) => a.sequence - b.sequence
+    )[0];
+    if (firstLocationOfDay) {
+      const globalIndex = locations.findIndex(
+        (loc) =>
+          loc.name === firstLocationOfDay.name &&
+          loc.day === firstLocationOfDay.day &&
+          loc.sequence === firstLocationOfDay.sequence
+      );
+      if (globalIndex !== -1) {
+        setActiveIndex(globalIndex);
+      }
+    }
+  };
+
+  const displayLocations = dayGroups[currentDayState]
+    ? dayGroups[currentDayState].sort((a, b) => a.sequence - b.sequence)
+    : [];
+  const displayActiveIndex =
+    currentActiveLocation && currentActiveLocation.day === currentDayState
+      ? displayLocations.findIndex(
+          (loc) =>
+            loc.name === currentActiveLocation.name &&
+            loc.sequence === currentActiveLocation.sequence
+        )
+      : 0;
 
   return (
-    <div className="p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 ">
+    <div className="w-full">
+      {/* Day Tabs */}
+      {sortedDays.length > 1 && (
+        <div className="flex justify-center mb-4">
+          <div className="bg-white/90 backdrop-blur-sm rounded-full p-1 shadow-lg border border-gray-200">
+            {sortedDays.map((day) => (
+              <button
+                key={day}
+                onClick={() => handleDayChange(day)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  currentDayState === day
+                    ? "bg-blue-500 text-white shadow-md"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {day}일차
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cards for current day */}
       <div
-        className="flex overflow-x-auto scroll-smooth relative mask-gradient-x"
-        id="card-container"
-        ref={ref}
+        className="flex gap-3 px-4 overflow-x-auto mask-gradient-x scrollbar-hide"
+        style={{ scrollBehavior: "smooth" }}
       >
-        {locations.map((location, index) => (
-          <LocationCard
-            id={`card-${index}`}
-            className={index === locations.length - 1 ? "mr-0" : "mr-3"}
-            key={index}
-            location={location}
-            active={index === activeIndex}
-            onClick={(e) => {
-              setActiveIndex(index);
-              map.panTo(location.position);
-              const card = e.target as HTMLDivElement;
-              card.scrollIntoView({
-                inline: "center",
-                block: "center",
-                behavior: "smooth",
-              });
-            }}
-          />
-        ))}
+        {displayLocations.map((location, index) => {
+          const globalIndex = locations.findIndex(
+            (loc) =>
+              loc.name === location.name &&
+              loc.day === location.day &&
+              loc.sequence === location.sequence
+          );
+          return (
+            <LocationCard
+              key={`${location.day}-${location.sequence}-${location.name}`}
+              location={location}
+              active={globalIndex === activeIndex}
+              onClick={() => setActiveIndex(globalIndex)}
+              className="flex-none w-80"
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -968,7 +1128,28 @@ function createPointFromResponse(
     | LineFunctionResponse["start"]
     | LineFunctionResponse["end"]
 ): google.maps.LatLngLiteral {
-  return { lat: Number(response.lat), lng: Number(response.lng) };
+  const lat = Number(response.lat);
+  const lng = Number(response.lng);
+
+  // 좌표 유효성 검사
+  if (isNaN(lat) || isNaN(lng) || !isFinite(lat) || !isFinite(lng)) {
+    console.error("Invalid coordinates received:", response);
+    // 기본 좌표로 대체 (서울)
+    return { lat: 37.5665, lng: 126.978 };
+  }
+
+  // 좌표 범위 검사 (위도: -90~90, 경도: -180~180)
+  const validLat = Math.max(-90, Math.min(90, lat));
+  const validLng = Math.max(-180, Math.min(180, lng));
+
+  if (validLat !== lat || validLng !== lng) {
+    console.warn("Coordinates out of range, clamping:", { lat, lng }, "to", {
+      lat: validLat,
+      lng: validLng,
+    });
+  }
+
+  return { lat: validLat, lng: validLng };
 }
 
 function createMarkerFromResponse(
@@ -1009,6 +1190,7 @@ function createLocationInfo(
     time: response.time,
     duration: response.duration,
     sequence: Number(response.sequence),
+    day: Number(response.day),
   };
   return locationInfo;
 }
@@ -1020,157 +1202,208 @@ function createTransportInfo(response: LineFunctionResponse): TransportInfo {
     end: response.end.name,
     transport: response.transport,
     travelTime: response.travelTime,
+    day: Number(response.day),
   };
 }
 
 interface TimelineProps {
+  visible: boolean;
+  closeTimeline: () => void;
   locations: LocationInfo[];
   transports: TransportInfo[];
   activeIndex: number;
-  setActiveIndex: (index: number) => void;
+  onLocationClick: (index: number) => void;
 }
 
 function Timeline({
+  visible,
+  closeTimeline,
   locations,
   transports,
   activeIndex,
-  setActiveIndex,
+  onLocationClick,
 }: TimelineProps) {
-  const timelineItemRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  const timelines: (
-    | (LocationInfo & { type: "location" })
-    | (TransportInfo & { type: "transport" })
-  )[] = [];
-  if (locations.length > 0) {
-    for (let i = 0; i < locations.length - 1; i++) {
-      const start = locations[i];
-      const transport = transports.find((transport) =>
-        transport.start.includes(start.name)
-      );
-      timelines.push({
-        ...start,
-        type: "location",
-      });
-      if (transport) {
-        timelines.push({
-          ...transport,
-          type: "transport",
-        });
+  // 날짜별로 위치와 이동 정보 그룹화
+  const dayGroups = locations.reduce(
+    (
+      groups: {
+        [key: number]: {
+          locations: LocationInfo[];
+          transports: TransportInfo[];
+        };
+      },
+      location
+    ) => {
+      const day = location.day;
+      if (!groups[day]) {
+        groups[day] = { locations: [], transports: [] };
       }
+      groups[day].locations.push(location);
+      return groups;
+    },
+    {}
+  );
+
+  // 각 날짜의 이동 정보 추가
+  transports.forEach((transport) => {
+    const day = transport.day;
+    if (dayGroups[day]) {
+      dayGroups[day].transports.push(transport);
     }
-    timelines.push({
-      ...locations[locations.length - 1],
-      type: "location",
-    });
-  }
+  });
 
-  // Get the active location name to compare with timeline items
-  const activeLocationName = locations[activeIndex]?.name;
-
-  // Scroll to active timeline item when activeIndex changes
-  useEffect(() => {
-    if (activeLocationName) {
-      const timelineLocationIndex = timelines.findIndex(
-        (timeline) =>
-          timeline.type === "location" && timeline.name === activeLocationName
-      );
-
-      if (
-        timelineLocationIndex !== -1 &&
-        timelineItemRefs.current[timelineLocationIndex]
-      ) {
-        timelineItemRefs.current[timelineLocationIndex]?.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-        });
-      }
-    }
-  }, [activeIndex, activeLocationName, timelines]);
+  // 날짜 순으로 정렬
+  const sortedDays = Object.keys(dayGroups)
+    .map(Number)
+    .sort((a, b) => a - b);
 
   return (
     <div
-      className="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
-      id="timeline"
+      className={`fixed top-0 right-0 w-80 h-full bg-white border-l border-gray-200 z-[1000] transition-transform duration-300 ease-in-out flex flex-col ${
+        visible ? "translate-x-0" : "translate-x-full"
+      }`}
     >
-      {timelines.map((timeline, index) =>
-        timeline.type === "location" ? (
-          <div
-            key={index}
-            className="flex my-4 relative"
-            ref={(el) => {
-              timelineItemRefs.current[index] = el;
-            }}
-          >
-            <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
-              {timeline.time ?? "유동적"}
-            </div>
-            <div className="flex-none w-5 flex flex-col items-center">
-              <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1.5"></div>
-              <div
-                className={`w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] z-0 ${
-                  index === timelines.length - 1 ? "hidden" : ""
-                }`}
-              ></div>
-            </div>
-            <div
-              className={`flex-1 bg-white rounded-lg p-3 shadow-sm border border-gray-200 cursor-pointer transition-all duration-200 hover:transform hover:-translate-y-0.5 hover:shadow-md ${
-                timeline.name === activeLocationName
-                  ? "border-l-4 border-l-blue-500"
-                  : ""
-              }`}
-              data-index={index}
-              onClick={() => {
-                // Find the index of this location in the locations array
-                const locationIndex = locations.findIndex(
-                  (loc) => loc.name === timeline.name
-                );
-                if (locationIndex !== -1) {
-                  setActiveIndex(locationIndex);
-                }
-              }}
-            >
-              <div className="font-semibold text-sm mb-1 text-gray-800">
-                {timeline.name}
-              </div>
-              <div className="text-xs text-gray-600 leading-snug">
-                {timeline.description}
-              </div>
-              {timeline.duration && (
-                <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
-                  {timeline.duration}
-                </div>
-              )}
-            </div>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900">여행 일정</h2>
+        <button
+          onClick={closeTimeline}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <i className="fas fa-times text-gray-500"></i>
+        </button>
+      </div>
+
+      {/* Timeline Content */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
+        {sortedDays.length === 0 ? (
+          <div className="text-center text-gray-500 mt-8">
+            아직 계획된 일정이 없습니다
           </div>
         ) : (
-          <div key={index} className="flex my-4 relative">
-            <div className="flex-none w-20 text-right pr-4"></div>
-            <div className="flex-none w-5 flex flex-col items-center">
-              <div className="w-3 h-3 rounded-full bg-gray-500 z-10 mt-1.5"></div>
-              <div className="w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] z-0"></div>
-            </div>
-            <div className="flex-1 bg-white/90 rounded-lg p-3 shadow-sm border border-gray-200">
-              <div className="font-semibold text-sm mb-1 text-gray-700 flex items-center gap-1.5">
-                <i
-                  className={`fas fa-${getTransportIcon(
-                    timeline.transport || "travel"
-                  )} text-gray-600`}
-                ></i>
-                {timeline.transport || "Travel"}
+          sortedDays.map((day) => (
+            <div key={day} className="mb-6">
+              {/* 날짜 헤더 */}
+              <div className="sticky top-0 bg-white z-10 mb-4">
+                <h3 className="text-lg font-bold text-gray-900 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                  {day}일차
+                </h3>
               </div>
-              <div className="text-xs text-gray-600 leading-snug">
-                {timeline.name}
-              </div>
-              {timeline.travelTime && (
-                <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
-                  {timeline.travelTime}
-                </div>
-              )}
+
+              {/* 해당 날짜의 위치들 */}
+              {dayGroups[day].locations
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((location, dayIndex) => {
+                  const globalIndex = locations.findIndex(
+                    (loc) =>
+                      loc.name === location.name &&
+                      loc.day === location.day &&
+                      loc.sequence === location.sequence
+                  );
+                  const isActive = globalIndex === activeIndex;
+
+                  return (
+                    <div key={`${day}-${location.sequence}`} className="mb-4">
+                      {/* Location Item */}
+                      <div
+                        className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                          isActive
+                            ? "bg-blue-50 border-blue-300 shadow-md"
+                            : "bg-white border-gray-200 hover:bg-gray-50"
+                        }`}
+                        onClick={() => onLocationClick(globalIndex)}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                              isActive
+                                ? "bg-blue-500 text-white"
+                                : "bg-gray-200 text-gray-600"
+                            }`}
+                          >
+                            {location.sequence}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900 truncate">
+                              {location.name}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                              {location.description}
+                            </p>
+                            <div className="flex items-center space-x-4 mt-2">
+                              {location.time && (
+                                <span className="text-xs text-blue-600 font-medium">
+                                  <i className="fas fa-clock mr-1"></i>
+                                  {location.time}
+                                </span>
+                              )}
+                              {location.duration && (
+                                <span className="text-xs text-green-600 font-medium">
+                                  <i className="fas fa-hourglass-half mr-1"></i>
+                                  {location.duration}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Transport to next location (only if not last location of the day) */}
+                      {dayIndex < dayGroups[day].locations.length - 1 && (
+                        <div className="flex items-center justify-center my-2">
+                          <div className="w-px h-6 bg-gray-300"></div>
+                        </div>
+                      )}
+
+                      {/* Transport info */}
+                      {dayIndex < dayGroups[day].locations.length - 1 &&
+                        dayGroups[day].transports.find(
+                          (t) =>
+                            t.start === location.name &&
+                            locations.find(
+                              (l) =>
+                                l.name === t.end &&
+                                l.day === day &&
+                                l.sequence === location.sequence + 1
+                            )
+                        ) && (
+                          <div className="mx-4 my-2 p-2 bg-gray-50 rounded border-l-4 border-blue-400">
+                            {(() => {
+                              const transport = dayGroups[day].transports.find(
+                                (t) =>
+                                  t.start === location.name &&
+                                  locations.find(
+                                    (l) =>
+                                      l.name === t.end &&
+                                      l.day === day &&
+                                      l.sequence === location.sequence + 1
+                                  )
+                              );
+                              return transport ? (
+                                <div className="text-sm text-gray-600">
+                                  <div className="flex items-center space-x-2">
+                                    <i className="fas fa-route text-blue-500"></i>
+                                    <span className="font-medium">
+                                      {transport.transport}
+                                    </span>
+                                    {transport.travelTime && (
+                                      <span className="text-gray-500">
+                                        • {transport.travelTime}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+                    </div>
+                  );
+                })}
             </div>
-          </div>
-        )
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -1293,7 +1526,8 @@ function ChatContainer({
         visible ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-800">여행 계획 채팅</h3>
         <button
           onClick={onClose}
@@ -1303,7 +1537,8 @@ function ChatContainer({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
             <i className="fas fa-comment-dots text-4xl mb-4 text-gray-300"></i>
@@ -1311,7 +1546,7 @@ function ChatContainer({
               안녕하세요! 어디로 여행을 가고 싶으신가요?
             </p>
             <p className="text-xs mt-2">
-              예: "제주도 하루 코스" 또는 "홍대 맛집 투어"
+              예: "제주도 하루 코스" 또는 "파리 하루 코스"
             </p>
           </div>
         ) : (
@@ -1344,12 +1579,15 @@ function ChatContainer({
         <div ref={messagesEndRef} />
       </div>
 
-      <ChatInput
-        value={inputValue}
-        onChange={setInputValue}
-        onSend={handleSend}
-        disabled={generating}
-      />
+      {/* Input Area - Fixed at bottom */}
+      <div className="flex-shrink-0">
+        <ChatInput
+          value={inputValue}
+          onChange={setInputValue}
+          onSend={handleSend}
+          disabled={generating}
+        />
+      </div>
     </div>
   );
 }
@@ -1436,7 +1674,13 @@ function MapContainer() {
     }, 100);
 
     setTimeout(() => {
-      map.fitBounds(bounds);
+      try {
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds);
+        }
+      } catch (error) {
+        console.error("Error fitting bounds (timeline toggle):", error);
+      }
     }, 350);
   }, [timelineVisible]);
 
@@ -1460,7 +1704,7 @@ function MapContainer() {
       const currentLocations = [...locations];
       const currentTransports = [...transports];
       const currentLines = [...lines];
-      const currentMarkers = [...markers];
+      const currentMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
       const currentBounds = bounds;
 
       // Clear existing map elements for new plan (but keep chat history)
@@ -1494,13 +1738,40 @@ function MapContainer() {
       try {
         // Add "하루 여행" only for the first message or if it's a new travel request
         let finalPrompt = prompt;
-        if (
-          chatMessages.length === 0 ||
+        if (chatMessages.length === 0) {
+          // Check if it's a multi-day request
+          const multiDayPatterns = [
+            /(\d+)일/g,
+            /(\d+)박/g,
+            /며칠/g,
+            /여러\s*날/g,
+            /다음\s*날/g,
+            /이틀/g,
+            /삼일/g,
+            /사일/g,
+            /닷새/g,
+          ];
+
+          const isMultiDay = multiDayPatterns.some((pattern) =>
+            pattern.test(prompt)
+          );
+
+          // Only add "하루 여행" if it's not explicitly a multi-day request
+          if (
+            !isMultiDay &&
+            !prompt.includes("하루") &&
+            !prompt.includes("일정") &&
+            !prompt.includes("계획")
+          ) {
+            finalPrompt = prompt + " 하루 여행";
+          }
+        } else if (
           prompt.includes("여행") ||
           prompt.includes("코스") ||
           prompt.includes("계획")
         ) {
-          finalPrompt = prompt + " 하루 여행";
+          // Don't add "하루 여행" for follow-up messages
+          finalPrompt = prompt;
         }
 
         // Add current plan context for modification requests
@@ -1577,22 +1848,31 @@ ${currentTransports
 
           const fns = chunk.functionCalls ?? [];
           for (const fn of fns) {
-            if (fn.name === "location") {
-              const { point, marker, locationInfo } = await setPin(
-                fn.args as unknown as LocationFunctionResponse
+            try {
+              if (fn.name === "location") {
+                const { point, marker, locationInfo } = await setPin(
+                  fn.args as unknown as LocationFunctionResponse
+                );
+                newPoints.push(point);
+                newMarkers.push(marker);
+                newLocations.push(locationInfo);
+              }
+              // Always process lines in planner mode
+              if (fn.name === "line") {
+                const { points, line, transport } = await setLeg(
+                  fn.args as unknown as LineFunctionResponse
+                );
+                newPoints.push(...points);
+                newLines.push(line);
+                newTransports.push(transport);
+              }
+            } catch (funcError) {
+              console.error(
+                `Error processing function ${fn.name}:`,
+                funcError,
+                fn.args
               );
-              newPoints.push(point);
-              newMarkers.push(marker);
-              newLocations.push(locationInfo);
-            }
-            // Always process lines in planner mode
-            if (fn.name === "line") {
-              const { points, line, transport } = await setLeg(
-                fn.args as unknown as LineFunctionResponse
-              );
-              newPoints.push(...points);
-              newLines.push(line);
-              newTransports.push(transport);
+              // Continue processing other functions instead of failing completely
             }
           }
         }
@@ -1613,7 +1893,15 @@ ${currentTransports
           for (const point of newPoints) {
             newBounds.extend(point);
           }
-          map.fitBounds(newBounds);
+
+          // 안전하게 지도 bounds 설정
+          try {
+            if (!newBounds.isEmpty()) {
+              map.fitBounds(newBounds);
+            }
+          } catch (error) {
+            console.error("Error fitting bounds:", error);
+          }
 
           setBounds(newBounds);
           setLines(newLines);
@@ -1649,7 +1937,13 @@ ${currentTransports
             line.geodesicPoly.setMap(map);
           });
 
-          map.fitBounds(currentBounds);
+          try {
+            if (!currentBounds.isEmpty()) {
+              map.fitBounds(currentBounds);
+            }
+          } catch (error) {
+            console.error("Error fitting bounds (restore):", error);
+          }
 
           // Add explanation to chat
           const fallbackMessage: ChatMessage = {
@@ -1680,7 +1974,23 @@ ${currentTransports
             line.geodesicPoly.setMap(map);
           });
 
-          map.fitBounds(currentBounds);
+          try {
+            if (!currentBounds.isEmpty()) {
+              map.fitBounds(currentBounds);
+            }
+          } catch (error) {
+            console.error("Error fitting bounds (restore):", error);
+          }
+
+          // Add explanation to chat
+          const fallbackMessage: ChatMessage = {
+            id: (Date.now() + 3).toString(),
+            type: "assistant",
+            content:
+              "죄송합니다. 계획을 제대로 업데이트하지 못했습니다. 기존 계획을 유지합니다. 다시 시도해주세요.",
+            timestamp: new Date(),
+          };
+          setChatMessages((prev) => [...prev, fallbackMessage]);
         }
 
         // Check if it's an API permission error
@@ -1740,7 +2050,7 @@ ${currentTransports
           <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
             <i className="fas fa-search text-[#717171] mr-3"></i>
             <PromptInput
-              placeholder="하루 여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행' 또는 '파리 하루 코스')"
+              placeholder="여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행', '파리 2박 3일', '제주도 3일 코스')"
               setPrompt={setPrompt}
               onKeyDown={(e) => {
                 if (e.keyCode === 13 && !e.shiftKey) {
@@ -1782,23 +2092,136 @@ ${currentTransports
               className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
               id="prev-card"
               onClick={() => {
-                setActiveIndex(
-                  (activeIndex - 1 + locations.length) % locations.length
+                // 현재 날짜의 위치들 가져오기
+                const currentActiveLocation = locations[activeIndex];
+                const currentDay = currentActiveLocation?.day || 1;
+                const dayGroups = locations.reduce(
+                  (groups: { [key: number]: LocationInfo[] }, location) => {
+                    const day = location.day;
+                    if (!groups[day]) {
+                      groups[day] = [];
+                    }
+                    groups[day].push(location);
+                    return groups;
+                  },
+                  {}
                 );
+
+                const currentDayLocations = dayGroups[currentDay]
+                  ? dayGroups[currentDay].sort(
+                      (a, b) => a.sequence - b.sequence
+                    )
+                  : [];
+
+                if (currentDayLocations.length > 0) {
+                  const currentIndexInDay = currentDayLocations.findIndex(
+                    (loc) =>
+                      loc.name === currentActiveLocation.name &&
+                      loc.sequence === currentActiveLocation.sequence
+                  );
+                  const prevIndexInDay =
+                    (currentIndexInDay - 1 + currentDayLocations.length) %
+                    currentDayLocations.length;
+                  const prevLocation = currentDayLocations[prevIndexInDay];
+
+                  const globalIndex = locations.findIndex(
+                    (loc) =>
+                      loc.name === prevLocation.name &&
+                      loc.day === prevLocation.day &&
+                      loc.sequence === prevLocation.sequence
+                  );
+                  if (globalIndex !== -1) {
+                    setActiveIndex(globalIndex);
+                  }
+                }
               }}
             >
               <i className="fas fa-chevron-left"></i>
             </button>
             <div className="flex mx-4" id="carousel-indicators">
-              {locations.map((location, index) => (
-                <CarouselIndicator key={index} active={index === activeIndex} />
-              ))}
+              {(() => {
+                const currentActiveLocation = locations[activeIndex];
+                const currentDay = currentActiveLocation?.day || 1;
+                const dayGroups = locations.reduce(
+                  (groups: { [key: number]: LocationInfo[] }, location) => {
+                    const day = location.day;
+                    if (!groups[day]) {
+                      groups[day] = [];
+                    }
+                    groups[day].push(location);
+                    return groups;
+                  },
+                  {}
+                );
+
+                const currentDayLocations = dayGroups[currentDay]
+                  ? dayGroups[currentDay].sort(
+                      (a, b) => a.sequence - b.sequence
+                    )
+                  : [];
+                const currentIndexInDay =
+                  currentActiveLocation &&
+                  currentActiveLocation.day === currentDay
+                    ? currentDayLocations.findIndex(
+                        (loc) =>
+                          loc.name === currentActiveLocation.name &&
+                          loc.sequence === currentActiveLocation.sequence
+                      )
+                    : 0;
+
+                return currentDayLocations.map((location, index) => (
+                  <CarouselIndicator
+                    key={`${location.day}-${location.sequence}`}
+                    active={index === currentIndexInDay}
+                  />
+                ));
+              })()}
             </div>
             <button
               className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
               id="next-card"
               onClick={() => {
-                setActiveIndex((activeIndex + 1) % locations.length);
+                // 현재 날짜의 위치들 가져오기
+                const currentActiveLocation = locations[activeIndex];
+                const currentDay = currentActiveLocation?.day || 1;
+                const dayGroups = locations.reduce(
+                  (groups: { [key: number]: LocationInfo[] }, location) => {
+                    const day = location.day;
+                    if (!groups[day]) {
+                      groups[day] = [];
+                    }
+                    groups[day].push(location);
+                    return groups;
+                  },
+                  {}
+                );
+
+                const currentDayLocations = dayGroups[currentDay]
+                  ? dayGroups[currentDay].sort(
+                      (a, b) => a.sequence - b.sequence
+                    )
+                  : [];
+
+                if (currentDayLocations.length > 0) {
+                  const currentIndexInDay = currentDayLocations.findIndex(
+                    (loc) =>
+                      loc.name === currentActiveLocation.name &&
+                      loc.sequence === currentActiveLocation.sequence
+                  );
+                  const nextIndexInDay =
+                    (currentIndexInDay + 1) % currentDayLocations.length;
+                  const nextLocation = currentDayLocations[nextIndexInDay];
+
+                  const globalIndex = locations.findIndex(
+                    (loc) =>
+                      loc.name === nextLocation.name &&
+                      loc.day === nextLocation.day &&
+                      loc.sequence === nextLocation.sequence
+                  );
+                  if (globalIndex !== -1) {
+                    setActiveIndex(globalIndex);
+                  }
+                }
               }}
             >
               <i className="fas fa-chevron-right"></i>
@@ -1864,10 +2287,12 @@ ${currentTransports
         </div>
         {timelineVisible && (
           <Timeline
+            visible={timelineVisible}
+            closeTimeline={() => setTimelineVisible(false)}
             locations={locations}
             transports={transports}
             activeIndex={activeIndex}
-            setActiveIndex={setActiveIndex}
+            onLocationClick={setActiveIndex}
           />
         )}
       </div>
