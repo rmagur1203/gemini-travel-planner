@@ -247,13 +247,13 @@ const lineFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
-const systemInstructions = `## 인터랙티브 지도 탐색기를 위한 시스템 지시사항
+const systemInstructions = `## System Instructions for an Interactive Map Explorer
 
-**모델 페르소나:** 당신은 지도를 통한 시각적 정보 제공에 특화된 지리학적 지식이 풍부한 어시스턴트입니다.
+**Model Persona:** 당신은 지도를 통한 시각적 정보 제공에 특화된 지리학적 지식이 풍부한 어시스턴트입니다.
 주요 목표는 지도 기반 시각화를 사용하여 모든 위치 관련 질의에 포괄적으로 답변하는 것입니다.
 실제 또는 가상의 장소, 과거, 현재 또는 미래의 모든 장소에 대한 정보를 처리할 수 있습니다.
 
-**핵심 기능:**
+**Core Capabilities:**
 
 1. **지리학적 지식:** 다음에 대한 광범위한 지식을 보유하고 있습니다:
    * 전 세계 위치, 랜드마크 및 명소
@@ -273,7 +273,7 @@ const systemInstructions = `## 인터랙티브 지도 탐색기를 위한 시스
 
    **B. 데이 플래너 모드** (DAY_PLANNER_MODE가 true일 때):
    * 다음을 포함한 상세한 하루 일정표 생성:
-     * 하루 동안 방문할 논리적인 위치 순서 (일반적으로 4-6개의 주요 장소)
+     * 하루 동안 방문할 논리적인 위치 순서 (사용자가 원하는 만큼 많은 장소를 포함할 수 있음)
      * 각 위치 방문을 위한 구체적인 시간과 현실적인 체류 시간
      * 적절한 교통수단을 사용한 위치 간 이동 경로
      * 이동 시간, 식사 시간, 방문 시간을 고려한 균형 잡힌 일정
@@ -286,7 +286,7 @@ const systemInstructions = `## 인터랙티브 지도 탐색기를 위한 시스
 1. **일반 탐색 모드:**
    * 이름, 설명, 위도, 경도와 함께 각 관련 관심 지점에 대해 "location" 함수 사용
    * 적절한 경우 관련 위치들을 연결하기 위해 "line" 함수 사용
-   * 가능한 한 많은 흥미로운 위치 제공 (4-8개가 이상적)
+   * 가능한 한 많은 흥미로운 위치 제공
    * 각 위치에 의미 있는 설명 포함
 
 2. **데이 플래너 모드:**
@@ -300,7 +300,7 @@ const systemInstructions = `## 인터랙티브 지도 탐색기를 위한 시스
 * 특정 위치에 대해 확실하지 않은 경우, 최선의 판단으로 좌표를 제공하세요
 * 질문이나 명확화 요청만으로 답변하지 마세요
 * 복잡하거나 추상적인 질의라도 항상 시각적으로 지도에 매핑하려고 시도하세요
-* 데이 플랜의 경우, 오전 8시 이전에 시작하지 않고 오후 9시까지 끝나는 현실적인 일정을 만드세요
+* 데이 플랜의 경우, 오전 6시 이전에 시작하지 않고 오후 12시까지 끝나는 현실적인 일정을 만드세요
 
 기억하세요: 기본 모드에서는 여행이나 지리에 대한 명시적인 질문이 아니더라도 지도에 표시할 관련 위치를 찾아 모든 질의에 응답하세요. 데이 플래너 모드에서는 구조화된 하루 일정표를 생성하세요.`;
 
@@ -535,7 +535,7 @@ function getPlaceholderImage(locationName: string): string {
 // Exports the current day plan as a simple text file.
 function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
   if (!locations.length) return;
-  let content = "# Your Day Plan\n\n";
+  let content = "# 당신의 하루 계획\n\n";
 
   const sortedLocations = [...locations].sort(
     (a, b) =>
@@ -545,8 +545,8 @@ function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
 
   sortedLocations.forEach((item, index) => {
     content += `## ${index + 1}. ${item.name}\n`;
-    content += `Time: ${item.time || "Flexible"}\n`;
-    if (item.duration) content += `Duration: ${item.duration}\n`;
+    content += `시간: ${item.time || "유동적"}\n`;
+    if (item.duration) content += `소요 시간: ${item.duration}\n`;
     content += `\n${item.description}\n\n`;
 
     if (index < sortedLocations.length - 1) {
@@ -556,10 +556,12 @@ function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
           line.name.includes(item.name) || line.name.includes(nextItem.name)
       );
       if (connectingLine) {
-        content += `### Travel to ${nextItem.name}\n`;
-        content += `Method: ${connectingLine.transport || "Not specified"}\n`;
+        content += `### ${nextItem.name}로 이동\n`;
+        content += `이동 수단: ${
+          connectingLine.transport || "명시되지 않음"
+        }\n`;
         if (connectingLine.travelTime) {
-          content += `Time: ${connectingLine.travelTime}\n`;
+          content += `이동 시간: ${connectingLine.travelTime}\n`;
         }
         content += `\n`;
       }
@@ -570,7 +572,7 @@ function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "day-plan.txt";
+  a.download = "하루계획.txt";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -596,7 +598,7 @@ function ModeToggle({ isPlannerMode, setPlannerMode }: ModeToggleProps) {
         <span className="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full peer-checked:bg-[#2196F3] peer-checked:before:translate-x-[22px]"></span>
       </label>
       <span className="ml-2.5 text-sm text-white font-medium">
-        Day Planner Mode
+        데이 플래너 모드
       </span>
     </div>
   );
@@ -941,7 +943,7 @@ function Timeline({
             }}
           >
             <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
-              {timeline.time ?? "Flexible"}
+              {timeline.time ?? "유동적"}
             </div>
             <div className="flex-none w-5 flex flex-col items-center">
               <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1.5"></div>
@@ -1088,7 +1090,7 @@ function MapContainer() {
       try {
         let finalPrompt = prompt;
         if (plannerMode) {
-          finalPrompt = prompt + " day trip";
+          finalPrompt = prompt + " 하루 여행";
         }
 
         const updatedInstructions = plannerMode
@@ -1202,8 +1204,8 @@ function MapContainer() {
             <PromptInput
               placeholder={
                 plannerMode
-                  ? "Create a day plan in... (e.g. 'Plan a day exploring Central Park' or 'One day in Paris')"
-                  : "Explore places, history, events, or ask about any location..."
+                  ? "하루 여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행' 또는 '파리 하루 코스')"
+                  : "장소, 역사, 이벤트 등 어떤 위치든 탐색해보세요..."
               }
               setPrompt={setPrompt}
               onKeyDown={(e) => {
@@ -1291,14 +1293,16 @@ function MapContainer() {
         </button>
 
         <div className="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2">
-          <h3 className="text-base font-semibold text-[#333]">Your Day Plan</h3>
+          <h3 className="text-base font-semibold text-[#333]">
+            당신의 하루 계획
+          </h3>
           <div className="flex gap-2">
             <button
               id="export-plan"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
               onClick={() => exportDayPlan(locations, lines)}
             >
-              <i className="fas fa-download mr-1"></i> Export
+              <i className="fas fa-download mr-1"></i> 내보내기
             </button>
             <button
               id="close-timeline"
