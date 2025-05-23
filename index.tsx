@@ -1261,10 +1261,6 @@ function MapContainer() {
 }
 
 function App() {
-  useEffect(() => {
-    run();
-  }, []);
-
   return (
     <LoadingProvider>
       <MapContainer />
