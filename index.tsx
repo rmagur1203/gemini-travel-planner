@@ -616,30 +616,32 @@ function LocationCardContainer({
   const ref = useRef<HTMLDivElement>(null);
 
   return (
-    <div
-      className="flex overflow-x-auto scroll-smooth no-scrollbar p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 relative mask-gradient-x"
-      id="card-container"
-      ref={ref}
-    >
-      {locations.map((location, index) => (
-        <LocationCard
-          id={`card-${index}`}
-          className={index === locations.length - 1 ? "mr-0" : "mr-3"}
-          key={index}
-          location={location}
-          active={index === activeIndex}
-          onClick={(e) => {
-            setActiveIndex(index);
-            map.panTo(location.position);
-            const card = e.target as HTMLDivElement;
-            card.scrollIntoView({
-              inline: "center",
-              block: "center",
-              behavior: "smooth",
-            });
-          }}
-        />
-      ))}
+    <div className="p-3 rounded-2xl backdrop-blur bg-white/5 border border-white/10 ">
+      <div
+        className="flex overflow-x-auto scroll-smooth relative mask-gradient-x"
+        id="card-container"
+        ref={ref}
+      >
+        {locations.map((location, index) => (
+          <LocationCard
+            id={`card-${index}`}
+            className={index === locations.length - 1 ? "mr-0" : "mr-3"}
+            key={index}
+            location={location}
+            active={index === activeIndex}
+            onClick={(e) => {
+              setActiveIndex(index);
+              map.panTo(location.position);
+              const card = e.target as HTMLDivElement;
+              card.scrollIntoView({
+                inline: "center",
+                block: "center",
+                behavior: "smooth",
+              });
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -962,7 +964,6 @@ function MapContainer() {
   const [bounds, setBounds] = useState<google.maps.LatLngBounds>(
     new google.maps.LatLngBounds()
   );
-  const [points, setPoints] = useState<google.maps.LatLngLiteral[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
   const [markers, setMarkers] = useState<
     google.maps.marker.AdvancedMarkerElement[]
@@ -973,7 +974,6 @@ function MapContainer() {
   // Reset function to clear all state
   const reset = useCallback(() => {
     setBounds(new google.maps.LatLngBounds());
-    setPoints([]);
 
     // Clear markers from map
     markers.forEach((marker) => (marker.map = null));
@@ -1093,7 +1093,6 @@ function MapContainer() {
         map.fitBounds(newBounds);
 
         setBounds(newBounds);
-        setPoints(newPoints);
         setLines(newLines);
         setMarkers(newMarkers);
         setLocations(newLocations);
@@ -1106,10 +1105,6 @@ function MapContainer() {
               (a.time || "").localeCompare(b.time || "")
           );
           setLocations(sortedLocations);
-          setTimelineVisible(true);
-        } else {
-          // In explorer mode, don't show timeline
-          setTimelineVisible(false);
         }
       } catch (e) {
         setErrorMessage(e.message);
