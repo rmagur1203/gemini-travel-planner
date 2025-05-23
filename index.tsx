@@ -4,25 +4,16 @@
  */
 import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
 import React, {
-  createContext,
   HTMLAttributes,
   KeyboardEventHandler,
   PropsWithChildren,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
 } from "react";
-import ReactDOM from "react-dom";
 import { createRoot } from "react-dom/client";
-import {
-  LoadingContext,
-  LoadingProvider,
-  Spinner,
-  useLoading,
-} from "./loading";
-import { ModeProvider, usePlannerMode } from "./mode";
+import { LoadingProvider, Spinner, useLoading } from "./loading";
 
 const { Map } = (await google.maps.importLibrary(
   "maps"
@@ -262,16 +253,7 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
    * 문화적 관심 지점
    * 여행 경로 및 교통 수단
 
-2. **두 가지 운영 모드:**
-
-   **A. 일반 탐색 모드** (DAY_PLANNER_MODE가 false일 때 기본값):
-   * 관련 지리적 위치를 식별하여 모든 질의에 응답
-   * 질의와 관련된 여러 관심 지점 표시
-   * 각 위치에 대한 풍부한 설명 제공
-   * 관련 위치들을 적절한 경로로 연결
-   * 일정 계획보다는 정보 전달에 중점
-
-   **B. 데이 플래너 모드** (DAY_PLANNER_MODE가 true일 때):
+2. **데이 플래너 모드:**
    * 다음을 포함한 상세한 하루 일정표 생성:
      * 하루 동안 방문할 논리적인 위치 순서 (사용자가 원하는 만큼 많은 장소를 포함할 수 있음)
      * 각 위치 방문을 위한 구체적인 시간과 현실적인 체류 시간
@@ -283,17 +265,11 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
 
 **출력 형식:**
 
-1. **일반 탐색 모드:**
-   * 이름, 설명, 위도, 경도와 함께 각 관련 관심 지점에 대해 "location" 함수 사용
-   * 적절한 경우 관련 위치들을 연결하기 위해 "line" 함수 사용
-   * 가능한 한 많은 흥미로운 위치 제공
-   * 각 위치에 의미 있는 설명 포함
-
-2. **데이 플래너 모드:**
-   * 필수 시간, 지속시간, 순번 속성과 함께 각 정거장에 대해 "location" 함수 사용
-   * 교통수단과 이동시간 속성과 함께 정거장들을 연결하기 위해 "line" 함수 사용
-   * 현실적인 시간 배정으로 논리적인 순서로 하루 일정 구성
-   * 각 위치에서 할 일에 대한 구체적인 세부사항 포함
+* 필수 시간, 지속시간, 순번 속성과 함께 각 정거장에 대해 "location" 함수 사용
+* 교통수단과 이동시간 속성과 함께 정거장들을 연결하기 위해 "line" 함수 사용
+* 현실적인 시간 배정으로 논리적인 순서로 하루 일정 구성
+* 각 위치에서 할 일에 대한 구체적인 세부사항 포함
+* 가능한 한 많은 흥미로운 위치 제공
 
 **중요한 지침:**
 * 모든 질의에 대해 location 함수를 통해 항상 지리적 데이터를 제공하세요
@@ -302,7 +278,7 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
 * 복잡하거나 추상적인 질의라도 항상 시각적으로 지도에 매핑하려고 시도하세요
 * 데이 플랜의 경우, 오전 6시 이전에 시작하지 않고 오후 12시까지 끝나는 현실적인 일정을 만드세요
 
-기억하세요: 기본 모드에서는 여행이나 지리에 대한 명시적인 질문이 아니더라도 지도에 표시할 관련 위치를 찾아 모든 질의에 응답하세요. 데이 플래너 모드에서는 구조화된 하루 일정표를 생성하세요.`;
+기억하세요: 구조화된 하루 일정표를 생성하여 각 위치에 시간과 순서를 포함하고, 위치 간 이동 방법도 명시하세요.`;
 
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
@@ -323,7 +299,7 @@ async function initMap(mapElement: HTMLElement) {
 }
 
 // Adds a pin (marker and popup) to the map for a given location.
-async function setPin(res: LocationFunctionResponse, plannerMode: boolean) {
+async function setPin(res: LocationFunctionResponse) {
   const point = createPointFromResponse(res);
   const marker = createMarkerFromResponse(point, res);
   map.panTo(point);
@@ -354,10 +330,8 @@ async function setPin(res: LocationFunctionResponse, plannerMode: boolean) {
 
   const popup = createPopup(point, marker, content);
 
-  // In explorer mode, always show popup. In planner mode, popup will be controlled by active index
-  if (!plannerMode) {
-    popup.setMap(map);
-  }
+  // In planner mode, popup will be controlled by active index
+  // Don't show popup initially - will be shown when location is selected
 
   const locationInfo = createLocationInfo(point, marker, content, popup, res);
 
@@ -369,7 +343,7 @@ async function setPin(res: LocationFunctionResponse, plannerMode: boolean) {
 }
 
 // Adds a line (route) between two locations on the map.
-async function setLeg(res: LineFunctionResponse, plannerMode: boolean) {
+async function setLeg(res: LineFunctionResponse) {
   const start = createPointFromResponse(res.start);
   const end = createPointFromResponse(res.end);
 
@@ -380,21 +354,18 @@ async function setLeg(res: LineFunctionResponse, plannerMode: boolean) {
   };
 
   const geodesicPolyOptions = {
-    strokeColor: plannerMode ? "#2196F3" : "#CC0099",
+    strokeColor: "#2196F3",
     strokeOpacity: 1.0,
-    strokeWeight: plannerMode ? 4 : 3,
+    strokeWeight: 4,
     map,
-  };
-
-  if (plannerMode) {
-    geodesicPolyOptions["icons"] = [
+    icons: [
       {
         icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
         offset: "0",
         repeat: "15px",
       },
-    ];
-  }
+    ],
+  };
 
   const path = [start, end];
 
@@ -579,31 +550,6 @@ function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
   URL.revokeObjectURL(url);
 }
 
-interface ModeToggleProps {
-  isPlannerMode: boolean;
-  setPlannerMode: (isPlannerMode: boolean) => void;
-}
-
-function ModeToggle({ isPlannerMode, setPlannerMode }: ModeToggleProps) {
-  return (
-    <div className="flex items-center mb-[12px] p-[4px] pr-[12px] bg-black/25 flex-row w-max rounded-full">
-      <label className="relative inline-block w-[46px] h-[24px]">
-        <input
-          type="checkbox"
-          id="planner-mode-toggle"
-          className="opacity-0 w-0 h-0 peer"
-          defaultChecked={isPlannerMode}
-          onChange={(e) => setPlannerMode(e.target.checked)}
-        />
-        <span className="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full peer-checked:bg-[#2196F3] peer-checked:before:translate-x-[22px]"></span>
-      </label>
-      <span className="ml-2.5 text-sm text-white font-medium">
-        데이 플래너 모드
-      </span>
-    </div>
-  );
-}
-
 interface PromptInputProps {
   placeholder: string;
   setPrompt: (prompt: string) => void;
@@ -724,8 +670,6 @@ function LocationCard({
   className,
   ...props
 }: LocationCardProps) {
-  const { plannerMode } = usePlannerMode();
-
   return (
     <div
       className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
@@ -741,13 +685,13 @@ function LocationCard({
         }}
       ></div>
 
-      {plannerMode && location.sequence && (
+      {location.sequence && (
         <div className="absolute top-[10px] left-[10px] bg-[#2196F3] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold z-[2] shadow-md">
           {location.sequence}
         </div>
       )}
 
-      {plannerMode && location.time && (
+      {location.time && (
         <div className="absolute top-[10px] right-[10px] bg-black/70 text-white py-1 px-2 rounded-2xl text-xs font-medium z-[2]">
           {location.time}
         </div>
@@ -761,7 +705,7 @@ function LocationCard({
           {location.description}
         </p>
 
-        {plannerMode && location.duration && (
+        {location.duration && (
           <div className="inline-block text-xs text-[#2196F3] bg-[#e3f2fd] px-1.5 py-0.5 rounded mt-1">
             {location.duration}
           </div>
@@ -1017,7 +961,6 @@ function Timeline({
 
 function MapContainer() {
   const { setLoading } = useLoading();
-  const { plannerMode, setPlannerMode } = usePlannerMode();
 
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -1070,6 +1013,17 @@ function MapContainer() {
     }
   }, [activeIndex]);
 
+  // Show only the active location's popup
+  useEffect(() => {
+    locations.forEach((location, index) => {
+      if (index === activeIndex) {
+        location.popup.setMap(map);
+      } else {
+        location.popup.setMap(null);
+      }
+    });
+  }, [activeIndex, locations]);
+
   useEffect(() => {
     setTimeout(() => {
       window.dispatchEvent(new Event("resize"));
@@ -1088,20 +1042,13 @@ function MapContainer() {
       reset();
 
       try {
-        let finalPrompt = prompt;
-        if (plannerMode) {
-          finalPrompt = prompt + " 하루 여행";
-        }
-
-        const updatedInstructions = plannerMode
-          ? systemInstructions.replace("DAY_PLANNER_MODE", "true")
-          : systemInstructions.replace("DAY_PLANNER_MODE", "false");
+        let finalPrompt = prompt + " 하루 여행";
 
         const response = await ai.models.generateContentStream({
           model: "gemini-2.0-flash-exp",
           contents: finalPrompt,
           config: {
-            systemInstruction: updatedInstructions,
+            systemInstruction: systemInstructions,
             temperature: 1,
             tools: [
               {
@@ -1126,18 +1073,16 @@ function MapContainer() {
           for (const fn of fns) {
             if (fn.name === "location") {
               const { point, marker, locationInfo } = await setPin(
-                fn.args as unknown as LocationFunctionResponse,
-                plannerMode
+                fn.args as unknown as LocationFunctionResponse
               );
               newPoints.push(point);
               newMarkers.push(marker);
               newLocations.push(locationInfo);
             }
-            // Only process lines in planner mode
-            if (fn.name === "line" && plannerMode) {
+            // Always process lines in planner mode
+            if (fn.name === "line") {
               const { points, line, transport } = await setLeg(
-                fn.args as unknown as LineFunctionResponse,
-                plannerMode
+                fn.args as unknown as LineFunctionResponse
               );
               newPoints.push(...points);
               newLines.push(line);
@@ -1163,13 +1108,14 @@ function MapContainer() {
         setLocations(newLocations);
         setTransports(newTransports);
 
-        if (plannerMode && newLocations.length > 0) {
+        if (newLocations.length > 0) {
           const sortedLocations = [...newLocations].sort(
             (a, b) =>
               (a.sequence || Infinity) - (b.sequence || Infinity) ||
               (a.time || "").localeCompare(b.time || "")
           );
           setLocations(sortedLocations);
+          setTimelineVisible(true);
         }
       } catch (e) {
         setErrorMessage(e.message);
@@ -1180,7 +1126,7 @@ function MapContainer() {
 
       setLoading(false);
     },
-    [plannerMode, reset, setLoading]
+    [reset, setLoading]
   );
 
   return (
@@ -1194,19 +1140,10 @@ function MapContainer() {
         <GoogleMap />
 
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]">
-          <ModeToggle
-            isPlannerMode={plannerMode}
-            setPlannerMode={setPlannerMode}
-          />
-
           <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
             <i className="fas fa-search text-[#717171] mr-3"></i>
             <PromptInput
-              placeholder={
-                plannerMode
-                  ? "하루 여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행' 또는 '파리 하루 코스')"
-                  : "장소, 역사, 이벤트 등 어떤 위치든 탐색해보세요..."
-              }
+              placeholder="하루 여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행' 또는 '파리 하루 코스')"
               setPrompt={setPrompt}
               onKeyDown={(e) => {
                 if (e.keyCode === 13 && !e.shiftKey) {
@@ -1274,14 +1211,14 @@ function MapContainer() {
       </div>
       <div
         className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] z-[1000] transition-transform duration-300 ease-in-out ${
-          timelineVisible && plannerMode ? "" : "invisible"
+          timelineVisible ? "" : "invisible"
         }`}
         id="timeline-container"
       >
         <button
           id="timeline-toggle"
           className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer border-0 md:flex text-black ${
-            !timelineVisible && locations.length > 0 && plannerMode
+            !timelineVisible && locations.length > 0
               ? "visible right-0"
               : "invisible"
           }`}
@@ -1315,7 +1252,7 @@ function MapContainer() {
             </button>
           </div>
         </div>
-        {plannerMode && (
+        {timelineVisible && (
           <Timeline
             locations={locations}
             transports={transports}
@@ -1331,10 +1268,8 @@ function MapContainer() {
 function App() {
   return (
     <LoadingProvider>
-      <ModeProvider>
-        <MapContainer />
-        <Spinner />
-      </ModeProvider>
+      <MapContainer />
+      <Spinner />
     </LoadingProvider>
   );
 }
