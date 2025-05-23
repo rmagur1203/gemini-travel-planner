@@ -630,7 +630,7 @@ function getPlaceholderImage(locationName: string): string {
   const lightness = 50 + (hash % 20);
   const letter = locationName.charAt(0).toUpperCase() || "?";
 
-  return `data:image/svg+xml,${encodeURIComponent(`
+  return `data:image/svg+xml;base64,${btoa(`
     <svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180">
       <rect width="300" height="180" fill="hsl(${hue}, ${saturation}%, ${lightness}%)" />
       <text x="150" y="95" font-family="Arial, sans-serif" font-size="72" fill="white" text-anchor="middle" dominant-baseline="middle">${letter}</text>
@@ -1028,6 +1028,7 @@ function LocationCardContainer({
       {locations.map((location, index) => (
         <LocationCard
           id={`card-${index}`}
+          className={index === locations.length - 1 ? "mr-0" : "mr-3"}
           key={index}
           location={location}
           active={index === activeIndex}
@@ -1057,23 +1058,23 @@ function LocationCard({
   location,
   active,
   onClick,
+  className,
   ...props
 }: LocationCardProps) {
   const { plannerMode } = usePlannerMode();
 
   return (
     <div
-      className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl mr-3 shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
+      className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
         active ? "border-2 border-[#2196F3]" : ""
-      }`}
+      } ${className}`}
       onClick={onClick}
       {...props}
     >
       <div
-        className="h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
-        style={{
-          backgroundImage: `url(${getPlaceholderImage(location.name)})`,
-        }}
+        className={`h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent bg-[url(${getPlaceholderImage(
+          location.name
+        )})]`}
       ></div>
 
       {plannerMode && location.sequence && (
@@ -1589,14 +1590,21 @@ function MapContainer() {
         />
       </div>
       <div
-        className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden transition-transform duration-300 ease-in-out ${
-          timelineVisible ? "" : "hidden"
+        className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] z-[1000] transition-transform duration-300 ease-in-out ${
+          timelineVisible ? "" : "invisible"
         }`}
         id="timeline-container"
       >
         <button
           id="timeline-toggle"
-          className="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden md:flex"
+          className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer border-0 md:flex text-black ${
+            !timelineVisible && locations.length > 0
+              ? "visible right-0"
+              : "invisible"
+          }`}
+          onClick={() => {
+            setTimelineVisible((prev) => !prev);
+          }}
         >
           <i className="fas fa-calendar-alt"></i>
         </button>
@@ -1613,6 +1621,9 @@ function MapContainer() {
             <button
               id="close-timeline"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              onClick={() => {
+                setTimelineVisible(false);
+              }}
             >
               <i className="fas fa-times"></i>
             </button>
