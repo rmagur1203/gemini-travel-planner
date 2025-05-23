@@ -45,6 +45,14 @@ interface LocationInfo {
   sequence: number;
 }
 
+interface TransportInfo {
+  name: string;
+  start: string;
+  end: string;
+  transport: string;
+  travelTime: string;
+}
+
 interface Point {
   lat: number;
   lng: number;
@@ -177,8 +185,8 @@ const locationFunctionDeclaration: FunctionDeclaration = {
 
 interface LineFunctionResponse {
   name: string;
-  start: { lat: string; lng: string };
-  end: { lat: string; lng: string };
+  start: { name: string; lat: string; lng: string };
+  end: { name: string; lat: string; lng: string };
   transport: string;
   travelTime: string;
 }
@@ -197,6 +205,10 @@ const lineFunctionDeclaration: FunctionDeclaration = {
         type: Type.OBJECT,
         description: "Start location of the route",
         properties: {
+          name: {
+            type: Type.STRING,
+            description: "Name of the start location.",
+          },
           lat: {
             type: Type.STRING,
             description: "Latitude of the start location.",
@@ -211,6 +223,10 @@ const lineFunctionDeclaration: FunctionDeclaration = {
         type: Type.OBJECT,
         description: "End location of the route",
         properties: {
+          name: {
+            type: Type.STRING,
+            description: "Name of the start location.",
+          },
           lat: {
             type: Type.STRING,
             description: "Latitude of the end location.",
@@ -470,9 +486,12 @@ async function setLeg(res: LineFunctionResponse) {
 
   lines.push(line);
 
+  const transport = createTransportInfo(res);
+
   return {
     points: [start, end],
     line,
+    transport,
   };
 }
 
@@ -849,17 +868,17 @@ async function run() {
   //   restart();
   // });
 
-  if (prevCardButton) {
-    prevCardButton.addEventListener("click", () => {
-      navigateCards(-1);
-    });
-  }
+  // if (prevCardButton) {
+  //   prevCardButton.addEventListener("click", () => {
+  //     navigateCards(-1);
+  //   });
+  // }
 
-  if (nextCardButton) {
-    nextCardButton.addEventListener("click", () => {
-      navigateCards(1);
-    });
-  }
+  // if (nextCardButton) {
+  //   nextCardButton.addEventListener("click", () => {
+  //     navigateCards(1);
+  //   });
+  // }
 
   // if (plannerModeToggle) {
   //   plannerModeToggle.addEventListener("change", () => {
@@ -912,7 +931,7 @@ function ModeToggle({ isPlannerMode, setPlannerMode }: ModeToggleProps) {
           type="checkbox"
           id="planner-mode-toggle"
           className="opacity-0 w-0 h-0 peer"
-          checked={isPlannerMode}
+          defaultChecked={isPlannerMode}
           onChange={(e) => setPlannerMode(e.target.checked)}
         />
         <span className="absolute cursor-pointer inset-0 bg-white/50 transition-all duration-400 rounded-[34px] backdrop-blur-sm before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white before:transition-all before:duration-400 before:rounded-full peer-checked:bg-[#2196F3] peer-checked:before:translate-x-[22px]"></span>
@@ -1169,6 +1188,16 @@ function createLocationInfo(
   return locationInfo;
 }
 
+function createTransportInfo(response: LineFunctionResponse): TransportInfo {
+  return {
+    name: response.name,
+    start: response.start.name,
+    end: response.end.name,
+    transport: response.transport,
+    travelTime: response.travelTime,
+  };
+}
+
 interface TimelineItem {
   time: string;
   index: number;
@@ -1176,6 +1205,157 @@ interface TimelineItem {
   description: string;
   duration: string;
   sequence: string;
+}
+
+interface TimelineProps {
+  locations: LocationInfo[];
+  transports: TransportInfo[];
+  activeIndex: number;
+  setActiveIndex: (index: number) => void;
+}
+function Timeline({
+  locations,
+  transports,
+  activeIndex,
+  setActiveIndex,
+}: TimelineProps) {
+  const timelineItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const timelines: (
+    | (LocationInfo & { type: "location" })
+    | (TransportInfo & { type: "transport" })
+  )[] = [];
+  if (locations.length > 0) {
+    for (let i = 0; i < locations.length - 1; i++) {
+      const start = locations[i];
+      const transport = transports.find((transport) =>
+        transport.start.includes(start.name)
+      );
+      timelines.push({
+        ...start,
+        type: "location",
+      });
+      if (transport) {
+        timelines.push({
+          ...transport,
+          type: "transport",
+        });
+      }
+    }
+    timelines.push({
+      ...locations[locations.length - 1],
+      type: "location",
+    });
+  }
+
+  // Get the active location name to compare with timeline items
+  const activeLocationName = locations[activeIndex]?.name;
+
+  // Scroll to active timeline item when activeIndex changes
+  useEffect(() => {
+    if (activeLocationName) {
+      const timelineLocationIndex = timelines.findIndex(
+        (timeline) =>
+          timeline.type === "location" && timeline.name === activeLocationName
+      );
+
+      if (
+        timelineLocationIndex !== -1 &&
+        timelineItemRefs.current[timelineLocationIndex]
+      ) {
+        timelineItemRefs.current[timelineLocationIndex]?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+    }
+  }, [activeIndex, activeLocationName, timelines]);
+
+  return (
+    <div
+      className="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
+      id="timeline"
+    >
+      {timelines.map((timeline, index) =>
+        timeline.type === "location" ? (
+          <div
+            key={index}
+            className="flex my-4 relative"
+            ref={(el) => {
+              timelineItemRefs.current[index] = el;
+            }}
+          >
+            <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
+              {timeline.time ?? "Flexible"}
+            </div>
+            <div className="flex-none w-5 flex flex-col items-center">
+              <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1.5"></div>
+              <div
+                className={`w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] z-0 ${
+                  index === timelines.length - 1 ? "hidden" : ""
+                }`}
+              ></div>
+            </div>
+            <div
+              className={`flex-1 bg-white rounded-lg p-3 shadow-sm border border-gray-200 cursor-pointer transition-all duration-200 hover:transform hover:-translate-y-0.5 hover:shadow-md ${
+                timeline.name === activeLocationName
+                  ? "border-l-4 border-l-blue-500"
+                  : ""
+              }`}
+              data-index={index}
+              onClick={() => {
+                // Find the index of this location in the locations array
+                const locationIndex = locations.findIndex(
+                  (loc) => loc.name === timeline.name
+                );
+                if (locationIndex !== -1) {
+                  setActiveIndex(locationIndex);
+                }
+              }}
+            >
+              <div className="font-semibold text-sm mb-1 text-gray-800">
+                {timeline.name}
+              </div>
+              <div className="text-xs text-gray-600 leading-snug">
+                {timeline.description}
+              </div>
+              {timeline.duration && (
+                <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
+                  {timeline.duration}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div key={index} className="flex my-4 relative">
+            <div className="flex-none w-20 text-right pr-4"></div>
+            <div className="flex-none w-5 flex flex-col items-center">
+              <div className="w-3 h-3 rounded-full bg-gray-500 z-10 mt-1.5"></div>
+              <div className="w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] z-0"></div>
+            </div>
+            <div className="flex-1 bg-white/90 rounded-lg p-3 shadow-sm border border-gray-200">
+              <div className="font-semibold text-sm mb-1 text-gray-700 flex items-center gap-1.5">
+                <i
+                  className={`fas fa-${getTransportIcon(
+                    timeline.transport || "travel"
+                  )} text-gray-600`}
+                ></i>
+                {timeline.transport || "Travel"}
+              </div>
+              <div className="text-xs text-gray-600 leading-snug">
+                {timeline.name}
+              </div>
+              {timeline.travelTime && (
+                <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
+                  {timeline.travelTime}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
 }
 
 function MapContainer() {
@@ -1186,15 +1366,19 @@ function MapContainer() {
   const [generating, setGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [timelineVisible, setTimelineVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const [bounds, setBounds] = useState<google.maps.LatLngBounds>();
+  const [bounds, setBounds] = useState<google.maps.LatLngBounds>(
+    new google.maps.LatLngBounds()
+  );
   const [points, setPoints] = useState<google.maps.LatLngLiteral[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
   const [markers, setMarkers] = useState<
     google.maps.marker.AdvancedMarkerElement[]
   >([]);
   const [locations, setLocations] = useState<LocationInfo[]>([]);
+  const [transports, setTransports] = useState<TransportInfo[]>([]);
 
   useEffect(() => {
     const card = document.getElementById(`card-${activeIndex}`);
@@ -1202,6 +1386,16 @@ function MapContainer() {
       card.click();
     }
   }, [activeIndex]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 100);
+
+    setTimeout(() => {
+      map.fitBounds(bounds);
+    }, 350);
+  }, [timelineVisible]);
 
   // Sends the user's prompt to the Google AI and processes the response.
   const sendText = useCallback(async (prompt: string) => {
@@ -1253,11 +1447,12 @@ function MapContainer() {
             locations.push(locationInfo);
           }
           if (fn.name === "line") {
-            const { points, line } = await setLeg(
+            const { points, line, transport } = await setLeg(
               fn.args as unknown as LineFunctionResponse
             );
             points.push(...points);
             lines.push(line);
+            transports.push(transport);
           }
         }
       }
@@ -1278,6 +1473,7 @@ function MapContainer() {
       setLines(lines);
       setMarkers(markers);
       setLocations(locations);
+      setTransports(transports);
 
       if (plannerMode && locations.length > 0) {
         locations.sort(
@@ -1285,8 +1481,7 @@ function MapContainer() {
             (a.sequence || Infinity) - (b.sequence || Infinity) ||
             (a.time || "").localeCompare(b.time || "")
         );
-        createTimeline(locations);
-        showTimeline();
+        setTimelineVisible(true);
       }
 
       // createLocationCards();
@@ -1300,99 +1495,13 @@ function MapContainer() {
     setLoading(false);
   }, []);
 
-  function createTimeline(dayPlanItinerary: LocationInfo[]) {
-    if (dayPlanItinerary.length === 0) return;
-    // setTimelines(
-    //   dayPlanItinerary.map((item, index) => ({
-    //     ...item,
-    //     index,
-    //   }))
-    // );
-
-    // dayPlanItinerary.forEach((item, index) => {
-    //   const timelineItem = document.createElement("div");
-    //   timelineItem.className = "timeline-item";
-    //   const timeDisplay = item.time || "Flexible";
-
-    //   timelineItem.innerHTML = `
-    //   <div class="timeline-time">${timeDisplay}</div>
-    //   <div class="timeline-connector">
-    //     <div class="timeline-dot"></div>
-    //     <div class="timeline-line"></div>
-    //   </div>
-    //   <div class="timeline-content" data-index="${index}">
-    //     <div class="timeline-title">${item.name}</div>
-    //     <div class="timeline-description">${item.description}</div>
-    //     ${
-    //       item.duration
-    //         ? `<div class="timeline-duration">${item.duration}</div>`
-    //         : ""
-    //     }
-    //   </div>
-    // `;
-
-    //   const timelineContent = timelineItem.querySelector(".timeline-content");
-    //   if (timelineContent) {
-    //     timelineContent.addEventListener("click", () => {
-    //       const popupIndex = popUps.findIndex((p) => p.name === item.name);
-    //       if (popupIndex !== -1) {
-    //         highlightCard(popupIndex);
-    //         map.panTo(popUps[popupIndex].position);
-    //       }
-    //     });
-    //   }
-    //   timeline.appendChild(timelineItem);
-    // });
-
-    // if (lines.length > 0 && isPlannerMode) {
-    //   const timelineItems = timeline.querySelectorAll(".timeline-item");
-    //   for (let i = 0; i < timelineItems.length - 1; i++) {
-    //     const currentItem = dayPlanItinerary[i];
-    //     const nextItem = dayPlanItinerary[i + 1];
-    //     const connectingLine = lines.find(
-    //       (line) =>
-    //         line.name.includes(currentItem.name) ||
-    //         line.name.includes(nextItem.name)
-    //     );
-
-    //     if (
-    //       connectingLine &&
-    //       (connectingLine.transport || connectingLine.travelTime)
-    //     ) {
-    //       const transportItem = document.createElement("div");
-    //       transportItem.className = "timeline-item transport-item";
-    //       transportItem.innerHTML = `
-    //       <div class="timeline-time"></div>
-    //       <div class="timeline-connector">
-    //         <div class="timeline-dot" style="background-color: #999;"></div>
-    //         <div class="timeline-line"></div>
-    //       </div>
-    //       <div class="timeline-content transport">
-    //         <div class="timeline-title">
-    //           <i class="fas fa-${getTransportIcon(
-    //             connectingLine.transport || "travel"
-    //           )}"></i>
-    //           ${connectingLine.transport || "Travel"}
-    //         </div>
-    //         <div class="timeline-description">${connectingLine.name}</div>
-    //         ${
-    //           connectingLine.travelTime
-    //             ? `<div class="timeline-duration">${connectingLine.travelTime}</div>`
-    //             : ""
-    //         }
-    //       </div>
-    //     `;
-    //       timelineItems[i].after(transportItem);
-    //     }
-    //   }
-    // }
-  }
-
   return (
     <>
       <div
         id="map-container"
-        className="absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black"
+        className={`absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black ${
+          timelineVisible ? "md:w-[calc(100%-280px)] md:left-0" : ""
+        }`}
       >
         <GoogleMap />
 
@@ -1480,12 +1589,14 @@ function MapContainer() {
         />
       </div>
       <div
-        className="fixed top-0 right-0 w-80 h-full bg-white/98 backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden hidden transition-transform duration-300 ease-in-out"
+        className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] shadow-[-2px_0_15px_rgba(0,0,0,0.1)] z-[1000] overflow-hidden transition-transform duration-300 ease-in-out ${
+          timelineVisible ? "" : "hidden"
+        }`}
         id="timeline-container"
       >
         <button
           id="timeline-toggle"
-          className="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden"
+          className="absolute top-1/2 left-[-40px] -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer shadow-[-2px_0_10px_rgba(0,0,0,0.1)] border-0 hidden md:flex"
         >
           <i className="fas fa-calendar-alt"></i>
         </button>
@@ -1497,7 +1608,7 @@ function MapContainer() {
               id="export-plan"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
             >
-              <i className="fas fa-download"></i> Export
+              <i className="fas fa-download mr-1"></i> Export
             </button>
             <button
               id="close-timeline"
@@ -1507,38 +1618,12 @@ function MapContainer() {
             </button>
           </div>
         </div>
-        <div
-          className="p-0 px-4 pb-4 overflow-y-auto h-[calc(100%-64px)]"
-          id="timeline"
-        >
-          {locations.map((location, index) => (
-            <div className="flex my-4 relative">
-              <div className="flex-none w-20 font-semibold text-gray-800 text-sm text-right pr-4 pt-0.5">
-                {location.time ?? "Flexible"}
-              </div>
-              <div className="flex-none w-5 flex flex-col items-center">
-                <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1"></div>
-                <div className="w-0.5 flex-grow bg-gray-300 absolute top-4 bottom-[-16px] left-[89px] z-0 last:hidden"></div>
-              </div>
-              <div
-                className="flex-1 bg-white rounded-lg p-3 shadow-sm border border-gray-200 cursor-pointer transition-all duration-200 hover:transform hover:-translate-y-0.5 hover:shadow-md data-[active=true]:border-l-4 data-[active=true]:border-l-blue-500"
-                data-index={index}
-              >
-                <div className="font-semibold text-sm mb-1 text-gray-800">
-                  {location.name}
-                </div>
-                <div className="text-xs text-gray-600 leading-snug">
-                  {location.description}
-                </div>
-                {location.duration && (
-                  <div className="inline-block text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded mt-2 font-medium">
-                    {location.duration}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <Timeline
+          locations={locations}
+          transports={transports}
+          activeIndex={activeIndex}
+          setActiveIndex={setActiveIndex}
+        />
       </div>
     </>
   );
