@@ -145,38 +145,35 @@ const locationFunctionDeclaration: FunctionDeclaration = {
   name: "location",
   parameters: {
     type: Type.OBJECT,
-    description: "Geographic coordinates of a location.",
+    description: "위치의 지리적 좌표",
     properties: {
       name: {
         type: Type.STRING,
-        description: "Name of the location.",
+        description: "위치의 이름",
       },
       description: {
         type: Type.STRING,
-        description:
-          "Description of the location: why is it relevant, details to know.",
+        description: "위치에 대한 설명: 왜 관련이 있는지, 알아야 할 세부사항",
       },
       lat: {
         type: Type.STRING,
-        description: "Latitude of the location.",
+        description: "위치의 위도",
       },
       lng: {
         type: Type.STRING,
-        description: "Longitude of the location.",
+        description: "위치의 경도",
       },
       time: {
         type: Type.STRING,
-        description:
-          'Time of day to visit this location (e.g., "09:00", "14:30").',
+        description: '이 위치를 방문할 시간 (예: "09:00", "14:30")',
       },
       duration: {
         type: Type.STRING,
-        description:
-          'Suggested duration of stay at this location (e.g., "1 hour", "45 minutes").',
+        description: '이 위치에서의 권장 체류 시간 (예: "1시간", "45분")',
       },
       sequence: {
         type: Type.NUMBER,
-        description: "Order in the day itinerary (1 = first stop of the day).",
+        description: "하루 일정에서의 순서 (1 = 하루의 첫 번째 장소)",
       },
     },
     required: ["name", "description", "lat", "lng"],
@@ -195,119 +192,117 @@ const lineFunctionDeclaration: FunctionDeclaration = {
   name: "line",
   parameters: {
     type: Type.OBJECT,
-    description: "Connection between a start location and an end location.",
+    description: "출발지와 목적지 사이의 연결",
     properties: {
       name: {
         type: Type.STRING,
-        description: "Name of the route or connection",
+        description: "경로 또는 연결의 이름",
       },
       start: {
         type: Type.OBJECT,
-        description: "Start location of the route",
+        description: "경로의 출발지",
         properties: {
           name: {
             type: Type.STRING,
-            description: "Name of the start location.",
+            description: "출발지의 이름",
           },
           lat: {
             type: Type.STRING,
-            description: "Latitude of the start location.",
+            description: "출발지의 위도",
           },
           lng: {
             type: Type.STRING,
-            description: "Longitude of the start location.",
+            description: "출발지의 경도",
           },
         },
       },
       end: {
         type: Type.OBJECT,
-        description: "End location of the route",
+        description: "경로의 목적지",
         properties: {
           name: {
             type: Type.STRING,
-            description: "Name of the start location.",
+            description: "목적지의 이름",
           },
           lat: {
             type: Type.STRING,
-            description: "Latitude of the end location.",
+            description: "목적지의 위도",
           },
           lng: {
             type: Type.STRING,
-            description: "Longitude of the end location.",
+            description: "목적지의 경도",
           },
         },
       },
       transport: {
         type: Type.STRING,
-        description:
-          'Mode of transportation between locations (e.g., "walking", "driving", "public transit").',
+        description: '위치 간 이동 수단 (예: "도보", "자동차", "대중교통")',
       },
       travelTime: {
         type: Type.STRING,
-        description:
-          'Estimated travel time between locations (e.g., "15 minutes", "1 hour").',
+        description: '위치 간 예상 이동 시간 (예: "15분", "1시간")',
       },
     },
     required: ["name", "start", "end"],
   },
 };
 
-const systemInstructions = `## System Instructions for an Interactive Map Explorer
+const systemInstructions = `## 인터랙티브 지도 탐색기를 위한 시스템 지시사항
 
-**Model Persona:** You are a knowledgeable, geographically-aware assistant that provides visual information through maps.
-Your primary goal is to answer any location-related query comprehensively, using map-based visualizations.
-You can process information about virtually any place, real or fictional, past, present, or future.
+**모델 페르소나:** 당신은 지도를 통한 시각적 정보 제공에 특화된 지리학적 지식이 풍부한 어시스턴트입니다.
+주요 목표는 지도 기반 시각화를 사용하여 모든 위치 관련 질의에 포괄적으로 답변하는 것입니다.
+실제 또는 가상의 장소, 과거, 현재 또는 미래의 모든 장소에 대한 정보를 처리할 수 있습니다.
 
-**Core Capabilities:**
+**핵심 기능:**
 
-1. **Geographic Knowledge:** You possess extensive knowledge of:
-   * Global locations, landmarks, and attractions
-   * Historical sites and their significance
-   * Natural wonders and geography
-   * Cultural points of interest
-   * Travel routes and transportation options
+1. **지리학적 지식:** 다음에 대한 광범위한 지식을 보유하고 있습니다:
+   * 전 세계 위치, 랜드마크 및 명소
+   * 역사적 장소와 그 의미
+   * 자연 경관과 지리
+   * 문화적 관심 지점
+   * 여행 경로 및 교통 수단
 
-2. **Two Operation Modes:**
+2. **두 가지 운영 모드:**
 
-   **A. General Explorer Mode** (Default when DAY_PLANNER_MODE is false):
-   * Respond to any query by identifying relevant geographic locations
-   * Show multiple points of interest related to the query
-   * Provide rich descriptions for each location
-   * Connect related locations with appropriate paths
-   * Focus on information delivery rather than scheduling
+   **A. 일반 탐색 모드** (DAY_PLANNER_MODE가 false일 때 기본값):
+   * 관련 지리적 위치를 식별하여 모든 질의에 응답
+   * 질의와 관련된 여러 관심 지점 표시
+   * 각 위치에 대한 풍부한 설명 제공
+   * 관련 위치들을 적절한 경로로 연결
+   * 일정 계획보다는 정보 전달에 중점
 
-   **B. Day Planner Mode** (When DAY_PLANNER_MODE is true):
-   * Create detailed day itineraries with:
-     * A logical sequence of locations to visit throughout a day (typically 4-6 major stops)
-     * Specific times and realistic durations for each location visit
-     * Travel routes between locations with appropriate transportation methods
-     * A balanced schedule considering travel time, meal breaks, and visit durations
-     * Each location must include a 'time' (e.g., "09:00") and 'duration' property
-     * Each location must include a 'sequence' number (1, 2, 3, etc.) to indicate order
-     * Each line connecting locations should include 'transport' and 'travelTime' properties
+   **B. 데이 플래너 모드** (DAY_PLANNER_MODE가 true일 때):
+   * 다음을 포함한 상세한 하루 일정표 생성:
+     * 하루 동안 방문할 논리적인 위치 순서 (일반적으로 4-6개의 주요 장소)
+     * 각 위치 방문을 위한 구체적인 시간과 현실적인 체류 시간
+     * 적절한 교통수단을 사용한 위치 간 이동 경로
+     * 이동 시간, 식사 시간, 방문 시간을 고려한 균형 잡힌 일정
+     * 각 위치는 '시간'(예: "09:00")과 '지속시간' 속성을 포함해야 함
+     * 각 위치는 순서를 나타내는 '순번' 번호(1, 2, 3 등)를 포함해야 함
+     * 위치를 연결하는 각 라인은 '교통수단'과 '이동시간' 속성을 포함해야 함
 
-**Output Format:**
+**출력 형식:**
 
-1. **General Explorer Mode:**
-   * Use the "location" function for each relevant point of interest with name, description, lat, lng
-   * Use the "line" function to connect related locations if appropriate
-   * Provide as many interesting locations as possible (4-8 is ideal)
-   * Ensure each location has a meaningful description
+1. **일반 탐색 모드:**
+   * 이름, 설명, 위도, 경도와 함께 각 관련 관심 지점에 대해 "location" 함수 사용
+   * 적절한 경우 관련 위치들을 연결하기 위해 "line" 함수 사용
+   * 가능한 한 많은 흥미로운 위치 제공 (4-8개가 이상적)
+   * 각 위치에 의미 있는 설명 포함
 
-2. **Day Planner Mode:**
-   * Use the "location" function for each stop with required time, duration, and sequence properties
-   * Use the "line" function to connect stops with transport and travelTime properties
-   * Structure the day in a logical sequence with realistic timing
-   * Include specific details about what to do at each location
+2. **데이 플래너 모드:**
+   * 필수 시간, 지속시간, 순번 속성과 함께 각 정거장에 대해 "location" 함수 사용
+   * 교통수단과 이동시간 속성과 함께 정거장들을 연결하기 위해 "line" 함수 사용
+   * 현실적인 시간 배정으로 논리적인 순서로 하루 일정 구성
+   * 각 위치에서 할 일에 대한 구체적인 세부사항 포함
 
-**Important Guidelines:**
-* For ANY query, always provide geographic data through the location function
-* If unsure about a specific location, use your best judgment to provide coordinates
-* Never reply with just questions or requests for clarification
-* Always attempt to map the information visually, even for complex or abstract queries
-* For day plans, create realistic schedules that start no earlier than 8:00am and end by 9:00pm
+**중요한 지침:**
+* 모든 질의에 대해 location 함수를 통해 항상 지리적 데이터를 제공하세요
+* 특정 위치에 대해 확실하지 않은 경우, 최선의 판단으로 좌표를 제공하세요
+* 질문이나 명확화 요청만으로 답변하지 마세요
+* 복잡하거나 추상적인 질의라도 항상 시각적으로 지도에 매핑하려고 시도하세요
+* 데이 플랜의 경우, 오전 8시 이전에 시작하지 않고 오후 9시까지 끝나는 현실적인 일정을 만드세요
 
-Remember: In default mode, respond to ANY query by finding relevant locations to display on the map, even if not explicitly about travel or geography. In day planner mode, create structured day itineraries.`;
+기억하세요: 기본 모드에서는 여행이나 지리에 대한 명시적인 질문이 아니더라도 지도에 표시할 관련 위치를 찾아 모든 질의에 응답하세요. 데이 플래너 모드에서는 구조화된 하루 일정표를 생성하세요.`;
 
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
@@ -429,24 +424,88 @@ async function setLeg(res: LineFunctionResponse, plannerMode: boolean) {
 // Returns an appropriate Font Awesome icon class based on transport type.
 function getTransportIcon(transportType: string): string {
   const type = (transportType || "").toLowerCase();
-  if (type.includes("walk")) return "walking";
-  if (type.includes("car") || type.includes("driv")) return "car-side";
+
+  // 도보/걷기
+  if (
+    type.includes("walk") ||
+    type.includes("도보") ||
+    type.includes("걷기") ||
+    type.includes("걸어서")
+  ) {
+    return "walking";
+  }
+
+  // 자동차/운전
+  if (
+    type.includes("car") ||
+    type.includes("driv") ||
+    type.includes("자동차") ||
+    type.includes("차") ||
+    type.includes("운전")
+  ) {
+    return "car-side";
+  }
+
+  // 버스/대중교통
   if (
     type.includes("bus") ||
     type.includes("transit") ||
-    type.includes("public")
-  )
+    type.includes("public") ||
+    type.includes("버스") ||
+    type.includes("대중교통") ||
+    type.includes("공공교통")
+  ) {
     return "bus-alt";
+  }
+
+  // 지하철/기차
   if (
     type.includes("train") ||
     type.includes("subway") ||
-    type.includes("metro")
-  )
+    type.includes("metro") ||
+    type.includes("지하철") ||
+    type.includes("전철") ||
+    type.includes("기차")
+  ) {
     return "train";
-  if (type.includes("bike") || type.includes("cycl")) return "bicycle";
-  if (type.includes("taxi") || type.includes("cab")) return "taxi";
-  if (type.includes("boat") || type.includes("ferry")) return "ship";
-  if (type.includes("plane") || type.includes("fly")) return "plane-departure";
+  }
+
+  // 자전거
+  if (
+    type.includes("bike") ||
+    type.includes("cycl") ||
+    type.includes("자전거") ||
+    type.includes("바이크")
+  ) {
+    return "bicycle";
+  }
+
+  // 택시
+  if (type.includes("taxi") || type.includes("cab") || type.includes("택시")) {
+    return "taxi";
+  }
+
+  // 배/선박
+  if (
+    type.includes("boat") ||
+    type.includes("ferry") ||
+    type.includes("배") ||
+    type.includes("페리") ||
+    type.includes("선박")
+  ) {
+    return "ship";
+  }
+
+  // 비행기
+  if (
+    type.includes("plane") ||
+    type.includes("fly") ||
+    type.includes("비행기") ||
+    type.includes("항공기")
+  ) {
+    return "plane-departure";
+  }
+
   return "route";
 }
 
@@ -461,12 +520,16 @@ function getPlaceholderImage(locationName: string): string {
   const lightness = 50 + (hash % 20);
   const letter = locationName.charAt(0).toUpperCase() || "?";
 
-  return `data:image/svg+xml;base64,${btoa(`
+  return `data:image/svg+xml;base64,${btoa(
+    unescape(
+      encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180">
       <rect width="300" height="180" fill="hsl(${hue}, ${saturation}%, ${lightness}%)" />
       <text x="150" y="95" font-family="Arial, sans-serif" font-size="72" fill="white" text-anchor="middle" dominant-baseline="middle">${letter}</text>
     </svg>
-  `)}`;
+  `)
+    )
+  )}`;
 }
 
 // Exports the current day plan as a simple text file.
@@ -1083,7 +1146,7 @@ function MapContainer() {
 
         if (newPoints.length === 0) {
           throw new Error(
-            "Could not generate any results. Try again, or try a different prompt."
+            "결과를 생성할 수 없습니다. 다시 시도하거나 다른 프롬프트를 입력해보세요."
           );
         }
 
@@ -1108,7 +1171,7 @@ function MapContainer() {
         }
       } catch (e) {
         setErrorMessage(e.message);
-        console.error("Error generating content:", e);
+        console.error("콘텐츠 생성 중 오류:", e);
       } finally {
         setGenerating(false);
       }
