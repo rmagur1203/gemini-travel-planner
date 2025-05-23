@@ -22,7 +22,7 @@ import {
   Spinner,
   useLoading,
 } from "./loading";
-import { usePlannerMode } from "./mode";
+import { ModeProvider, usePlannerMode } from "./mode";
 
 const { Map } = (await google.maps.importLibrary(
   "maps"
@@ -75,33 +75,42 @@ class Popup extends google.maps.OverlayView {
   ) {
     super();
     this.position = position;
-    content.classList.add("popup-bubble");
 
     this.containerDiv = document.createElement("div");
-    this.containerDiv.classList.add("popup-container");
-    this.containerDiv.appendChild(content); // Append the actual content here
-    // Prevent clicks inside the popup from propagating to the map.
+    this.containerDiv.className =
+      "absolute z-50 transform -translate-x-1/2 -translate-y-full";
+
+    // Add a speech bubble tail
+    const bubble = document.createElement("div");
+    bubble.className = "relative";
+
+    // Add tail using CSS
+    const tail = document.createElement("div");
+    tail.className =
+      "absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[8px] border-l-transparent border-r-transparent border-t-white";
+    tail.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.1))";
+
+    bubble.appendChild(content);
+    bubble.appendChild(tail);
+    this.containerDiv.appendChild(bubble);
+
     google.maps.OverlayView.preventMapHitsAndGesturesFrom(this.containerDiv);
   }
 
-  /** Called when the popup is added to the map via setMap(). */
   onAdd() {
     this.getPanes()!.floatPane.appendChild(this.containerDiv);
   }
 
-  /** Called when the popup is removed from the map via setMap(null). */
   onRemove() {
     if (this.containerDiv.parentElement) {
       this.containerDiv.parentElement.removeChild(this.containerDiv);
     }
   }
 
-  /** Called each frame when the popup needs to draw itself. */
   draw() {
     const divPosition = this.getProjection().fromLatLngToDivPixel(
       this.position
     )!;
-    // Hide the popup when it is far out of view for performance.
     const display =
       Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000
         ? "block"
@@ -118,16 +127,8 @@ class Popup extends google.maps.OverlayView {
   }
 }
 
-// Application state variables
-let map: google.maps.Map; // Holds the Google Map instance
-let points: Point[] = []; // Array to store geographical points from responses
-let markers: google.maps.marker.AdvancedMarkerElement[] = []; // Array to store map markers
-let lines: Line[] = []; // Array to store polylines representing routes/connections
-let popUps: LocationInfo[] = []; // Array to store custom popups for locations
-let bounds: google.maps.LatLngBounds; // Google Maps LatLngBounds object to fit map around points
-let activeCardIndex = 0; // Index of the currently selected location card
-let isPlannerMode = false; // Flag to indicate if Day Planner mode is active
-let dayPlanItinerary: LocationInfo[] = []; // Array to hold structured items for the day plan timeline
+// Global variables - will be managed by React state
+let map: google.maps.Map;
 
 interface LocationFunctionResponse {
   name: string;
@@ -163,7 +164,6 @@ const locationFunctionDeclaration: FunctionDeclaration = {
         type: Type.STRING,
         description: "Longitude of the location.",
       },
-      // Properties specific to Day Planner mode
       time: {
         type: Type.STRING,
         description:
@@ -190,7 +190,7 @@ interface LineFunctionResponse {
   transport: string;
   travelTime: string;
 }
-// Function declaration for extracting route/line data using Google AI.
+
 const lineFunctionDeclaration: FunctionDeclaration = {
   name: "line",
   parameters: {
@@ -237,7 +237,6 @@ const lineFunctionDeclaration: FunctionDeclaration = {
           },
         },
       },
-      // Properties specific to Day Planner mode
       transport: {
         type: Type.STRING,
         description:
@@ -253,7 +252,6 @@ const lineFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
-// System instructions provided to the Google AI model guiding its responses.
 const systemInstructions = `## System Instructions for an Interactive Map Explorer
 
 **Model Persona:** You are a knowledgeable, geographically-aware assistant that provides visual information through maps.
@@ -311,18 +309,14 @@ You can process information about virtually any place, real or fictional, past, 
 
 Remember: In default mode, respond to ANY query by finding relevant locations to display on the map, even if not explicitly about travel or geography. In day planner mode, create structured day itineraries.`;
 
-// Initialize the Google AI client.
 const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
 
-// Initializes the Google Map instance and necessary libraries.
 async function initMap(mapElement: HTMLElement) {
-  bounds = new LatLngBounds();
-
   map = new Map(mapElement, {
-    center: { lat: -34.397, lng: 150.644 }, // Default center
-    zoom: 8, // Default zoom
-    mapId: "4504f8b37365c3d0", // Custom map ID for styling
-    gestureHandling: "greedy", // Allows easy map interaction on all devices
+    center: { lat: -34.397, lng: 150.644 },
+    zoom: 8,
+    mapId: "4504f8b37365c3d0",
+    gestureHandling: "greedy",
     zoomControl: false,
     cameraControl: false,
     mapTypeControl: false,
@@ -333,55 +327,40 @@ async function initMap(mapElement: HTMLElement) {
   });
 }
 
-// Resets the map and application state to initial conditions.
-function reset() {
-  return;
-  points = [];
-  bounds = new google.maps.LatLngBounds();
-  dayPlanItinerary = [];
-
-  markers.forEach((marker) => marker.setMap(null));
-  markers = [];
-
-  lines.forEach((line) => {
-    line.poly.setMap(null);
-    line.geodesicPoly.setMap(null);
-  });
-  lines = [];
-
-  popUps.forEach((popup) => {
-    popup.popup.setMap(null);
-    if (popup.content && popup.content.remove) popup.content.remove();
-  });
-  popUps = [];
-
-  if (cardContainer) cardContainer.innerHTML = "";
-  if (carouselIndicators) carouselIndicators.innerHTML = "";
-  if (cardCarousel) cardCarousel.style.display = "none";
-  if (timeline) timeline.innerHTML = "";
-  if (timelineContainer) hideTimeline();
-}
-
 // Adds a pin (marker and popup) to the map for a given location.
-async function setPin(res: LocationFunctionResponse) {
+async function setPin(res: LocationFunctionResponse, plannerMode: boolean) {
   const point = createPointFromResponse(res);
-
   const marker = createMarkerFromResponse(point, res);
   map.panTo(point);
 
   const content = document.createElement("div");
+
+  // Apply Tailwind CSS classes for better styling
+  content.className =
+    "bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-w-xs min-w-[250px]";
+
   let timeInfo = "";
   if (res.time) {
-    timeInfo = `<div style="margin-top: 4px; font-size: 12px; color: #2196F3;">
-                  <i class="fas fa-clock"></i> ${res.time}
-                  ${res.duration ? ` • ${res.duration}` : ""}
+    timeInfo = `<div class="flex items-center mt-2 text-sm text-blue-500">
+                  <i class="fas fa-clock mr-1"></i> 
+                  <span>${res.time}${
+      res.duration ? ` • ${res.duration}` : ""
+    }</span>
                 </div>`;
   }
-  content.innerHTML = `<b>${res.name}</b><br/>${res.description}${timeInfo}`;
+
+  content.innerHTML = `
+    <div class="space-y-2">
+      <h3 class="font-bold text-lg text-gray-900 leading-tight">${res.name}</h3>
+      <p class="text-sm text-gray-600 leading-relaxed">${res.description}</p>
+      ${timeInfo}
+    </div>
+  `;
 
   const popup = createPopup(point, marker, content);
 
-  if (!isPlannerMode) {
+  // In explorer mode, always show popup. In planner mode, popup will be controlled by active index
+  if (!plannerMode) {
     popup.setMap(map);
   }
 
@@ -395,24 +374,24 @@ async function setPin(res: LocationFunctionResponse) {
 }
 
 // Adds a line (route) between two locations on the map.
-async function setLeg(res: LineFunctionResponse) {
+async function setLeg(res: LineFunctionResponse, plannerMode: boolean) {
   const start = createPointFromResponse(res.start);
   const end = createPointFromResponse(res.end);
 
   const polyOptions = {
-    strokeOpacity: 0.0, // Invisible base line
+    strokeOpacity: 0.0,
     strokeWeight: 3,
     map,
   };
 
   const geodesicPolyOptions = {
-    strokeColor: isPlannerMode ? "#2196F3" : "#CC0099",
+    strokeColor: plannerMode ? "#2196F3" : "#CC0099",
     strokeOpacity: 1.0,
-    strokeWeight: isPlannerMode ? 4 : 3,
+    strokeWeight: plannerMode ? 4 : 3,
     map,
   };
 
-  if (isPlannerMode) {
+  if (plannerMode) {
     geodesicPolyOptions["icons"] = [
       {
         icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
@@ -438,8 +417,6 @@ async function setLeg(res: LineFunctionResponse) {
     travelTime: res.travelTime,
   };
 
-  lines.push(line);
-
   const transport = createTransportInfo(res);
 
   return {
@@ -452,41 +429,25 @@ async function setLeg(res: LineFunctionResponse) {
 // Returns an appropriate Font Awesome icon class based on transport type.
 function getTransportIcon(transportType: string): string {
   const type = (transportType || "").toLowerCase();
-  if (type.includes("walk")) {
-    return "walking";
-  }
-  if (type.includes("car") || type.includes("driv")) {
-    return "car-side";
-  }
+  if (type.includes("walk")) return "walking";
+  if (type.includes("car") || type.includes("driv")) return "car-side";
   if (
     type.includes("bus") ||
     type.includes("transit") ||
     type.includes("public")
-  ) {
+  )
     return "bus-alt";
-  }
   if (
     type.includes("train") ||
     type.includes("subway") ||
     type.includes("metro")
-  ) {
+  )
     return "train";
-  }
-  if (type.includes("bike") || type.includes("cycl")) {
-    return "bicycle";
-  }
-  if (type.includes("taxi") || type.includes("cab")) {
-    return "taxi";
-  }
-  if (type.includes("boat") || type.includes("ferry")) {
-    return "ship";
-  }
-  if (type.includes("plane") || type.includes("fly")) {
-    return "plane-departure";
-  }
-  {
-    return "route";
-  } // Default icon
+  if (type.includes("bike") || type.includes("cycl")) return "bicycle";
+  if (type.includes("taxi") || type.includes("cab")) return "taxi";
+  if (type.includes("boat") || type.includes("ferry")) return "ship";
+  if (type.includes("plane") || type.includes("fly")) return "plane-departure";
+  return "route";
 }
 
 // Generates a placeholder SVG image for location cards.
@@ -509,18 +470,24 @@ function getPlaceholderImage(locationName: string): string {
 }
 
 // Exports the current day plan as a simple text file.
-function exportDayPlan() {
-  if (!dayPlanItinerary.length) return;
+function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
+  if (!locations.length) return;
   let content = "# Your Day Plan\n\n";
 
-  dayPlanItinerary.forEach((item, index) => {
+  const sortedLocations = [...locations].sort(
+    (a, b) =>
+      (a.sequence || Infinity) - (b.sequence || Infinity) ||
+      (a.time || "").localeCompare(b.time || "")
+  );
+
+  sortedLocations.forEach((item, index) => {
     content += `## ${index + 1}. ${item.name}\n`;
     content += `Time: ${item.time || "Flexible"}\n`;
     if (item.duration) content += `Duration: ${item.duration}\n`;
     content += `\n${item.description}\n\n`;
 
-    if (index < dayPlanItinerary.length - 1) {
-      const nextItem = dayPlanItinerary[index + 1];
+    if (index < sortedLocations.length - 1) {
+      const nextItem = sortedLocations[index + 1];
       const connectingLine = lines.find(
         (line) =>
           line.name.includes(item.name) || line.name.includes(nextItem.name)
@@ -701,9 +668,10 @@ function LocationCard({
       {...props}
     >
       <div
-        className={`h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent bg-[url(${getPlaceholderImage(
-          location.name
-        )})]`}
+        className="h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
+        style={{
+          backgroundImage: `url(${getPlaceholderImage(location.name)})`,
+        }}
       ></div>
 
       {plannerMode && location.sequence && (
@@ -834,6 +802,7 @@ interface TimelineProps {
   activeIndex: number;
   setActiveIndex: (index: number) => void;
 }
+
 function Timeline({
   locations,
   transports,
@@ -1001,6 +970,34 @@ function MapContainer() {
   const [locations, setLocations] = useState<LocationInfo[]>([]);
   const [transports, setTransports] = useState<TransportInfo[]>([]);
 
+  // Reset function to clear all state
+  const reset = useCallback(() => {
+    setBounds(new google.maps.LatLngBounds());
+    setPoints([]);
+
+    // Clear markers from map
+    markers.forEach((marker) => (marker.map = null));
+    setMarkers([]);
+
+    // Clear lines from map
+    lines.forEach((line) => {
+      line.poly.setMap(null);
+      line.geodesicPoly.setMap(null);
+    });
+    setLines([]);
+
+    // Clear popups from map
+    locations.forEach((location) => {
+      location.popup.setMap(null);
+      if (location.content && location.content.remove)
+        location.content.remove();
+    });
+    setLocations([]);
+
+    setTransports([]);
+    setTimelineVisible(false);
+  }, [markers, lines, locations]);
+
   useEffect(() => {
     const card = document.getElementById(`card-${activeIndex}`);
     if (card) {
@@ -1019,109 +1016,119 @@ function MapContainer() {
   }, [timelineVisible]);
 
   // Sends the user's prompt to the Google AI and processes the response.
-  const sendText = useCallback(async (prompt: string) => {
-    setLoading(true);
-    setErrorMessage("");
-    reset();
+  const sendText = useCallback(
+    async (prompt: string) => {
+      setLoading(true);
+      setErrorMessage("");
+      reset();
 
-    try {
-      let finalPrompt = prompt;
-      if (plannerMode) {
-        finalPrompt = prompt + " day trip";
-      }
+      try {
+        let finalPrompt = prompt;
+        if (plannerMode) {
+          finalPrompt = prompt + " day trip";
+        }
 
-      const updatedInstructions = plannerMode
-        ? systemInstructions.replace("DAY_PLANNER_MODE", "true")
-        : systemInstructions.replace("DAY_PLANNER_MODE", "false");
+        const updatedInstructions = plannerMode
+          ? systemInstructions.replace("DAY_PLANNER_MODE", "true")
+          : systemInstructions.replace("DAY_PLANNER_MODE", "false");
 
-      const response = await ai.models.generateContentStream({
-        model: "gemini-2.0-flash-exp",
-        contents: finalPrompt,
-        config: {
-          systemInstruction: updatedInstructions,
-          temperature: 1,
-          tools: [
-            {
-              functionDeclarations: [
-                locationFunctionDeclaration,
-                lineFunctionDeclaration,
-              ],
-            },
-          ],
-        },
-      });
+        const response = await ai.models.generateContentStream({
+          model: "gemini-2.0-flash-exp",
+          contents: finalPrompt,
+          config: {
+            systemInstruction: updatedInstructions,
+            temperature: 1,
+            tools: [
+              {
+                functionDeclarations: [
+                  locationFunctionDeclaration,
+                  lineFunctionDeclaration,
+                ],
+              },
+            ],
+          },
+        });
 
-      const bounds = new google.maps.LatLngBounds();
-      const points: google.maps.LatLngLiteral[] = [];
-      const lines: Line[] = [];
-      const markers: google.maps.marker.AdvancedMarkerElement[] = [];
-      const locations: LocationInfo[] = [];
-      for await (const chunk of response) {
-        const fns = chunk.functionCalls ?? [];
-        for (const fn of fns) {
-          if (fn.name === "location") {
-            const { point, marker, locationInfo } = await setPin(
-              fn.args as unknown as LocationFunctionResponse
-            );
-            points.push(point);
-            markers.push(marker);
-            locations.push(locationInfo);
-          }
-          if (fn.name === "line") {
-            const { points, line, transport } = await setLeg(
-              fn.args as unknown as LineFunctionResponse
-            );
-            points.push(...points);
-            lines.push(line);
-            transports.push(transport);
+        const newBounds = new google.maps.LatLngBounds();
+        const newPoints: google.maps.LatLngLiteral[] = [];
+        const newLines: Line[] = [];
+        const newMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+        const newLocations: LocationInfo[] = [];
+        const newTransports: TransportInfo[] = [];
+
+        for await (const chunk of response) {
+          const fns = chunk.functionCalls ?? [];
+          for (const fn of fns) {
+            if (fn.name === "location") {
+              const { point, marker, locationInfo } = await setPin(
+                fn.args as unknown as LocationFunctionResponse,
+                plannerMode
+              );
+              newPoints.push(point);
+              newMarkers.push(marker);
+              newLocations.push(locationInfo);
+            }
+            // Only process lines in planner mode
+            if (fn.name === "line" && plannerMode) {
+              const { points, line, transport } = await setLeg(
+                fn.args as unknown as LineFunctionResponse,
+                plannerMode
+              );
+              newPoints.push(...points);
+              newLines.push(line);
+              newTransports.push(transport);
+            }
           }
         }
+
+        if (newPoints.length === 0) {
+          throw new Error(
+            "Could not generate any results. Try again, or try a different prompt."
+          );
+        }
+
+        for (const point of newPoints) {
+          newBounds.extend(point);
+        }
+        map.fitBounds(newBounds);
+
+        setBounds(newBounds);
+        setPoints(newPoints);
+        setLines(newLines);
+        setMarkers(newMarkers);
+        setLocations(newLocations);
+        setTransports(newTransports);
+
+        if (plannerMode && newLocations.length > 0) {
+          const sortedLocations = [...newLocations].sort(
+            (a, b) =>
+              (a.sequence || Infinity) - (b.sequence || Infinity) ||
+              (a.time || "").localeCompare(b.time || "")
+          );
+          setLocations(sortedLocations);
+          setTimelineVisible(true);
+        } else {
+          // In explorer mode, don't show timeline
+          setTimelineVisible(false);
+        }
+      } catch (e) {
+        setErrorMessage(e.message);
+        console.error("Error generating content:", e);
+      } finally {
+        setGenerating(false);
       }
 
-      if (points.length === 0) {
-        throw new Error(
-          "Could not generate any results. Try again, or try a different prompt."
-        );
-      }
-
-      for (const point of points) {
-        bounds.extend(point);
-      }
-      map.fitBounds(bounds);
-
-      setBounds(bounds);
-      setPoints(points);
-      setLines(lines);
-      setMarkers(markers);
-      setLocations(locations);
-      setTransports(transports);
-
-      if (plannerMode && locations.length > 0) {
-        locations.sort(
-          (a, b) =>
-            (a.sequence || Infinity) - (b.sequence || Infinity) ||
-            (a.time || "").localeCompare(b.time || "")
-        );
-        setTimelineVisible(true);
-      }
-
-      // createLocationCards();
-    } catch (e) {
-      setErrorMessage(e.message);
-      console.error("Error generating content:", e);
-    } finally {
-      setGenerating(false);
-    }
-
-    setLoading(false);
-  }, []);
+      setLoading(false);
+    },
+    [plannerMode, reset, setLoading]
+  );
 
   return (
     <>
       <div
         id="map-container"
         className={`absolute inset-0 h-full w-full transition-all duration-300 ease-in-out overflow-hidden text-black ${
-          timelineVisible ? "md:w-[calc(100%-280px)] md:left-0" : ""
+          timelineVisible ? "md:w-[calc(100%-320px)] md:left-0" : ""
         }`}
       >
         <GoogleMap />
@@ -1203,22 +1210,18 @@ function MapContainer() {
           </div>
         </div>
 
-        <ResetButton
-          onClick={() => {
-            reset();
-          }}
-        />
+        <ResetButton onClick={reset} />
       </div>
       <div
         className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] z-[1000] transition-transform duration-300 ease-in-out ${
-          timelineVisible ? "" : "invisible"
+          timelineVisible && plannerMode ? "" : "invisible"
         }`}
         id="timeline-container"
       >
         <button
           id="timeline-toggle"
           className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer border-0 md:flex text-black ${
-            !timelineVisible && locations.length > 0
+            !timelineVisible && locations.length > 0 && plannerMode
               ? "visible right-0"
               : "invisible"
           }`}
@@ -1235,6 +1238,7 @@ function MapContainer() {
             <button
               id="export-plan"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              onClick={() => exportDayPlan(locations, lines)}
             >
               <i className="fas fa-download mr-1"></i> Export
             </button>
@@ -1249,12 +1253,14 @@ function MapContainer() {
             </button>
           </div>
         </div>
-        <Timeline
-          locations={locations}
-          transports={transports}
-          activeIndex={activeIndex}
-          setActiveIndex={setActiveIndex}
-        />
+        {plannerMode && (
+          <Timeline
+            locations={locations}
+            transports={transports}
+            activeIndex={activeIndex}
+            setActiveIndex={setActiveIndex}
+          />
+        )}
       </div>
     </>
   );
@@ -1263,8 +1269,10 @@ function MapContainer() {
 function App() {
   return (
     <LoadingProvider>
-      <MapContainer />
-      <Spinner />
+      <ModeProvider>
+        <MapContainer />
+        <Spinner />
+      </ModeProvider>
     </LoadingProvider>
   );
 }
