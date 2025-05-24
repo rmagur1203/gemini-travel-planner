@@ -2030,6 +2030,40 @@ ${currentTransports
     [chatMessages, markers, lines, locations, transports, bounds, setLoading]
   );
 
+  // Handle file import
+  const handleFileImport = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (event) => {
+      const target = event.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        importPlanFromJSON(
+          file,
+          setBounds,
+          setLines,
+          setMarkers,
+          setLocations,
+          setTransports,
+          setTimelineVisible,
+          setActiveIndex,
+          reset
+        );
+      }
+    };
+    input.click();
+  }, [
+    setBounds,
+    setLines,
+    setMarkers,
+    setLocations,
+    setTransports,
+    setTimelineVisible,
+    setActiveIndex,
+    reset,
+  ]);
+
   return (
     <>
       <div
@@ -2231,6 +2265,47 @@ ${currentTransports
 
         <ResetButton onClick={reset} />
 
+        {/* Import button */}
+        <button
+          id="import-plan"
+          className="absolute bottom-24 left-20 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
+          onClick={handleFileImport}
+          title="여행 일정 불러오기"
+        >
+          <i className="fas fa-upload"></i>
+        </button>
+
+        {/* Export JSON button */}
+        <button
+          id="export-plan-json-main"
+          className={`absolute bottom-24 left-36 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black ${
+            locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+          onClick={() =>
+            locations.length > 0 &&
+            exportPlanAsJSON(locations, transports, lines)
+          }
+          title="여행 일정 JSON 저장"
+          disabled={locations.length === 0}
+        >
+          <i className="fas fa-download"></i>
+        </button>
+
+        {/* Export text button */}
+        <button
+          id="export-plan-text-main"
+          className={`absolute bottom-24 left-52 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black ${
+            locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+          onClick={() =>
+            locations.length > 0 && exportDayPlan(locations, lines)
+          }
+          title="여행 일정 텍스트 저장"
+          disabled={locations.length === 0}
+        >
+          <i className="fas fa-file-text"></i>
+        </button>
+
         {/* Chat toggle button */}
         <button
           id="chat-toggle"
@@ -2264,15 +2339,22 @@ ${currentTransports
 
         <div className="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2">
           <h3 className="text-base font-semibold text-[#333]">
-            당신의 하루 계획
+            당신의 여행 계획
           </h3>
           <div className="flex gap-2">
+            <button
+              id="export-plan-json"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              onClick={() => exportPlanAsJSON(locations, transports, lines)}
+            >
+              <i className="fas fa-download mr-1"></i> JSON 저장
+            </button>
             <button
               id="export-plan"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
               onClick={() => exportDayPlan(locations, lines)}
             >
-              <i className="fas fa-download mr-1"></i> 내보내기
+              <i className="fas fa-file-text mr-1"></i> 텍스트
             </button>
             <button
               id="close-timeline"
@@ -2318,3 +2400,193 @@ function App() {
 
 const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
+
+// Exports the current plan as JSON for later import
+function exportPlanAsJSON(
+  locations: LocationInfo[],
+  transports: TransportInfo[],
+  lines: Line[]
+) {
+  if (!locations.length) {
+    alert("내보낼 일정이 없습니다.");
+    return;
+  }
+
+  // 일정 데이터를 JSON 형태로 구성
+  const planData = {
+    version: "1.0",
+    exportDate: new Date().toISOString(),
+    locations: locations.map((loc) => ({
+      name: loc.name,
+      description: loc.description,
+      lat: loc.position.lat(),
+      lng: loc.position.lng(),
+      time: loc.time,
+      duration: loc.duration,
+      sequence: loc.sequence,
+      day: loc.day,
+    })),
+    transports: transports.map((transport) => ({
+      name: transport.name,
+      start: transport.start,
+      end: transport.end,
+      transport: transport.transport,
+      travelTime: transport.travelTime,
+      day: transport.day,
+    })),
+    totalDays: Math.max(...locations.map((loc) => loc.day)),
+  };
+
+  // JSON 파일로 다운로드
+  const blob = new Blob([JSON.stringify(planData, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+
+  // 파일명에 날짜와 총 일수 포함
+  const dateStr = new Date().toISOString().split("T")[0];
+  a.download = `여행일정_${planData.totalDays}일_${dateStr}.json`;
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Imports a plan from JSON file
+async function importPlanFromJSON(
+  file: File,
+  setBounds: (bounds: google.maps.LatLngBounds) => void,
+  setLines: (lines: Line[]) => void,
+  setMarkers: (markers: google.maps.marker.AdvancedMarkerElement[]) => void,
+  setLocations: (locations: LocationInfo[]) => void,
+  setTransports: (transports: TransportInfo[]) => void,
+  setTimelineVisible: (visible: boolean) => void,
+  setActiveIndex: (index: number) => void,
+  clearCurrentPlan: () => void
+) {
+  try {
+    // 지도가 초기화되었는지 확인
+    if (!map) {
+      console.error("Map is not initialized");
+      alert("지도가 아직 초기화되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+
+    const text = await file.text();
+    const planData = JSON.parse(text);
+
+    // 버전 확인
+    if (!planData.version || planData.version !== "1.0") {
+      alert("지원하지 않는 파일 형식입니다.");
+      return;
+    }
+
+    // 기존 계획 삭제
+    clearCurrentPlan();
+
+    // 새로운 bounds 생성
+    const newBounds = new google.maps.LatLngBounds();
+    const newMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+    const newLocations: LocationInfo[] = [];
+    const newLines: Line[] = [];
+    const newTransports: TransportInfo[] = [];
+
+    // 위치들 복원
+    for (const locData of planData.locations) {
+      const locationResponse: LocationFunctionResponse = {
+        name: locData.name,
+        description: locData.description,
+        lat: locData.lat.toString(),
+        lng: locData.lng.toString(),
+        time: locData.time || "",
+        duration: locData.duration || "",
+        sequence: locData.sequence.toString(),
+        day: locData.day.toString(),
+      };
+
+      try {
+        const { point, marker, locationInfo } = await setPin(locationResponse);
+        newBounds.extend(point);
+        newMarkers.push(marker);
+        newLocations.push(locationInfo);
+      } catch (error) {
+        console.error("Error restoring location:", error, locData);
+      }
+    }
+
+    // 교통수단 정보 복원
+    for (const transportData of planData.transports) {
+      // 시작점과 끝점 찾기
+      const startLoc = planData.locations.find(
+        (loc: any) => loc.name === transportData.start
+      );
+      const endLoc = planData.locations.find(
+        (loc: any) => loc.name === transportData.end
+      );
+
+      if (startLoc && endLoc) {
+        const lineResponse: LineFunctionResponse = {
+          name: transportData.name,
+          start: {
+            name: startLoc.name,
+            lat: startLoc.lat.toString(),
+            lng: startLoc.lng.toString(),
+          },
+          end: {
+            name: endLoc.name,
+            lat: endLoc.lat.toString(),
+            lng: endLoc.lng.toString(),
+          },
+          transport: transportData.transport,
+          travelTime: transportData.travelTime,
+          day: transportData.day.toString(),
+        };
+
+        try {
+          const { points, line, transport } = await setLeg(lineResponse);
+          newLines.push(line);
+          newTransports.push(transport);
+        } catch (error) {
+          console.error("Error restoring transport:", error, transportData);
+        }
+      }
+    }
+
+    // 상태 업데이트
+    setBounds(newBounds);
+    setMarkers(newMarkers);
+
+    // 위치를 순서대로 정렬
+    const sortedLocations = newLocations.sort(
+      (a, b) =>
+        a.day - b.day ||
+        (a.sequence || Infinity) - (b.sequence || Infinity) ||
+        (a.time || "").localeCompare(b.time || "")
+    );
+
+    setLocations(sortedLocations);
+    setTransports(newTransports);
+    setLines(newLines);
+    setTimelineVisible(true);
+    setActiveIndex(0);
+
+    // 지도 범위 조정
+    try {
+      if (!newBounds.isEmpty()) {
+        map.fitBounds(newBounds);
+      }
+    } catch (error) {
+      console.error("Error fitting bounds:", error);
+    }
+
+    alert(`${planData.totalDays}일 여행 일정이 성공적으로 불러왔습니다!`);
+  } catch (error) {
+    console.error("Error importing plan:", error);
+    alert(
+      "파일을 불러오는 중 오류가 발생했습니다. 올바른 여행 일정 파일인지 확인해주세요."
+    );
+  }
+}
