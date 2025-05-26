@@ -54,6 +54,7 @@ interface ChatMessage {
   type: "user" | "assistant";
   content: string;
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 interface Point {
@@ -1428,6 +1429,11 @@ function ChatMessageComponent({ message }: ChatMessageProps) {
       >
         <div className="text-sm leading-relaxed whitespace-pre-wrap">
           {message.content}
+          {message.isStreaming && (
+            <span className="inline-block ml-1 w-2 h-4 bg-current animate-pulse">
+              |
+            </span>
+          )}
         </div>
         <div
           className={`text-xs mt-1 opacity-70 ${
@@ -1829,6 +1835,9 @@ ${currentTransports
                 ],
               },
             ],
+            thinkingConfig: {
+              includeThoughts: true,
+            },
           },
         });
 
@@ -1840,10 +1849,34 @@ ${currentTransports
         const newLocations: LocationInfo[] = [];
         const newTransports: TransportInfo[] = [];
 
+        let streamingMessageId: string | null = null;
+
         for await (const chunk of response) {
-          // Collect text response
+          // Collect text response and update in real-time
           if (chunk.text) {
             assistantResponse += chunk.text;
+
+            // Create message on first text chunk
+            if (!streamingMessageId) {
+              streamingMessageId = (Date.now() + 1).toString();
+              const assistantMessage: ChatMessage = {
+                id: streamingMessageId,
+                type: "assistant",
+                content: chunk.text,
+                timestamp: new Date(),
+                isStreaming: true,
+              };
+              setChatMessages((prev) => [...prev, assistantMessage]);
+            } else {
+              // Update existing message with accumulated text
+              setChatMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === streamingMessageId
+                    ? { ...msg, content: assistantResponse, isStreaming: true }
+                    : msg
+                )
+              );
+            }
           }
 
           const fns = chunk.functionCalls ?? [];
@@ -1886,6 +1919,17 @@ ${currentTransports
             timestamp: new Date(),
           };
           setChatMessages((prev) => [...prev, assistantMessage]);
+        }
+
+        // 스트리밍 완료 시 isStreaming 플래그 제거
+        if (streamingMessageId) {
+          setChatMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === streamingMessageId
+                ? { ...msg, isStreaming: false }
+                : msg
+            )
+          );
         }
 
         // Check if we got a complete new plan or need to restore previous plan
