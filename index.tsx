@@ -1427,14 +1427,25 @@ function ChatMessageComponent({ message }: ChatMessageProps) {
             : "bg-gray-100 text-gray-800 rounded-bl-sm"
         }`}
       >
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">
-          {message.content}
-          {message.isStreaming && (
-            <span className="inline-block ml-1 w-2 h-4 bg-current animate-pulse">
-              |
-            </span>
-          )}
-        </div>
+        {isUser ? (
+          // User messages display as plain text
+          <div className="text-sm leading-relaxed whitespace-pre-wrap">
+            {message.content}
+          </div>
+        ) : (
+          // Assistant messages render markdown
+          <div
+            className="text-sm leading-relaxed markdown-content"
+            dangerouslySetInnerHTML={{
+              __html: renderMarkdown(message.content),
+            }}
+          />
+        )}
+        {message.isStreaming && (
+          <span className="inline-block ml-1 w-2 h-4 bg-current animate-pulse">
+            |
+          </span>
+        )}
         <div
           className={`text-xs mt-1 opacity-70 ${
             isUser ? "text-blue-100" : "text-gray-500"
@@ -2632,5 +2643,41 @@ async function importPlanFromJSON(
     alert(
       "파일을 불러오는 중 오류가 발생했습니다. 올바른 여행 일정 파일인지 확인해주세요."
     );
+  }
+}
+
+// Declare global marked and DOMPurify functions
+declare global {
+  const marked: {
+    parse: (markdown: string) => string;
+    setOptions: (options: any) => void;
+  };
+  const DOMPurify: {
+    sanitize: (dirty: string) => string;
+  };
+}
+
+// Utility function to render markdown safely
+function renderMarkdown(content: string): string {
+  if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
+    // Fallback to plain text if libraries are not loaded
+    return content;
+  }
+
+  try {
+    // Configure marked for better rendering
+    if (marked.setOptions) {
+      marked.setOptions({
+        breaks: true, // Convert line breaks to <br>
+        gfm: true, // GitHub Flavored Markdown
+      });
+    }
+
+    // Parse markdown and sanitize HTML
+    const rawHtml = marked.parse(content);
+    return DOMPurify.sanitize(rawHtml);
+  } catch (error) {
+    console.error("Error rendering markdown:", error);
+    return content; // Fallback to plain text
   }
 }
