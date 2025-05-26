@@ -886,10 +886,10 @@ function ResetButton({ onClick }: ResetButtonProps) {
   return (
     <button
       id="reset"
-      className="absolute bottom-24 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
+      className="absolute bottom-24 left-4 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation"
       onClick={onClick}
     >
-      <i className="fas fa-undo"></i>
+      <i className="fas fa-undo text-base md:text-sm"></i>
     </button>
   );
 }
@@ -1049,14 +1049,17 @@ function LocationCard({
 }: LocationCardProps) {
   return (
     <div
-      className={`flex-none w-[220px] bg-white/70 backdrop-blur-md rounded-xl shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg ${
+      className={`flex-none bg-white/70 backdrop-blur-md rounded-xl shadow-md overflow-hidden cursor-pointer transition-all duration-200 relative border border-white/30 hover:-translate-y-[3px] hover:shadow-lg touch-manipulation ${
         active ? "border-2 border-[#2196F3]" : ""
+      } ${
+        // Mobile: smaller width, Desktop: original width
+        "w-64 md:w-[220px]"
       } ${className}`}
       onClick={onClick}
       {...props}
     >
       <div
-        className="h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
+        className="h-[100px] md:h-[120px] bg-[#f5f5f5] bg-cover bg-center relative transition-transform duration-300 ease-in-out hover:scale-105 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1/2 after:bg-gradient-to-t after:from-black/50 after:to-transparent"
         style={{
           backgroundImage: `url(${getPlaceholderImage(location.name)})`,
         }}
@@ -1075,7 +1078,7 @@ function LocationCard({
       )}
 
       <div className="p-3">
-        <h3 className="text-base font-semibold mb-1 text-[#222222]">
+        <h3 className="text-sm md:text-base font-semibold mb-1 text-[#222222] line-clamp-1">
           {location.name}
         </h3>
         <p className="text-xs text-[#717171] mb-1 overflow-hidden text-ellipsis line-clamp-2 leading-snug">
@@ -1088,7 +1091,7 @@ function LocationCard({
           </div>
         )}
 
-        <div className="text-[10px] text-[#999]">
+        <div className="text-[10px] text-[#999] mt-1">
           {location.position.lat().toFixed(5)},{" "}
           {location.position.lng().toFixed(5)}
         </div>
@@ -1259,153 +1262,168 @@ function Timeline({
     .sort((a, b) => a - b);
 
   return (
-    <div
-      className={`fixed top-0 right-0 w-80 h-full bg-white border-l border-gray-200 z-[1000] transition-transform duration-300 ease-in-out flex flex-col ${
-        visible ? "translate-x-0" : "translate-x-full"
-      }`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900">여행 일정</h2>
-        <button
+    <>
+      {/* Mobile overlay - only visible on mobile when timeline is open */}
+      {visible && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[999] md:hidden"
           onClick={closeTimeline}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-        >
-          <i className="fas fa-times text-gray-500"></i>
-        </button>
-      </div>
+        />
+      )}
 
-      {/* Timeline Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
-        {sortedDays.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            아직 계획된 일정이 없습니다
-          </div>
-        ) : (
-          sortedDays.map((day) => (
-            <div key={day} className="mb-6">
-              {/* 날짜 헤더 */}
-              <div className="sticky top-0 bg-white z-10 mb-4">
-                <h3 className="text-lg font-bold text-gray-900 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
-                  {day}일차
-                </h3>
-              </div>
+      <div
+        className={`fixed top-0 right-0 h-full bg-white border-l border-gray-200 z-[1000] transition-transform duration-300 ease-in-out flex flex-col ${
+          visible ? "translate-x-0" : "translate-x-full"
+        } ${
+          // Mobile: full width, Desktop: fixed width
+          "w-full md:w-80"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">여행 일정</h2>
+          <button
+            onClick={closeTimeline}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors touch-manipulation"
+          >
+            <i className="fas fa-times text-gray-500 text-lg"></i>
+          </button>
+        </div>
 
-              {/* 해당 날짜의 위치들 */}
-              {dayGroups[day].locations
-                .sort((a, b) => a.sequence - b.sequence)
-                .map((location, dayIndex) => {
-                  const globalIndex = locations.findIndex(
-                    (loc) =>
-                      loc.name === location.name &&
-                      loc.day === location.day &&
-                      loc.sequence === location.sequence
-                  );
-                  const isActive = globalIndex === activeIndex;
+        {/* Timeline Content */}
+        <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
+          {sortedDays.length === 0 ? (
+            <div className="text-center text-gray-500 mt-8">
+              아직 계획된 일정이 없습니다
+            </div>
+          ) : (
+            sortedDays.map((day) => (
+              <div key={day} className="mb-6">
+                {/* 날짜 헤더 */}
+                <div className="sticky top-0 bg-white z-10 mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                    {day}일차
+                  </h3>
+                </div>
 
-                  return (
-                    <div key={`${day}-${location.sequence}`} className="mb-4">
-                      {/* Location Item */}
-                      <div
-                        className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                          isActive
-                            ? "bg-blue-50 border-blue-300 shadow-md"
-                            : "bg-white border-gray-200 hover:bg-gray-50"
-                        }`}
-                        onClick={() => onLocationClick(globalIndex)}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                              isActive
-                                ? "bg-blue-500 text-white"
-                                : "bg-gray-200 text-gray-600"
-                            }`}
-                          >
-                            {location.sequence}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-gray-900 truncate">
-                              {location.name}
-                            </h4>
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                              {location.description}
-                            </p>
-                            <div className="flex items-center space-x-4 mt-2">
-                              {location.time && (
-                                <span className="text-xs text-blue-600 font-medium">
-                                  <i className="fas fa-clock mr-1"></i>
-                                  {location.time}
-                                </span>
-                              )}
-                              {location.duration && (
-                                <span className="text-xs text-green-600 font-medium">
-                                  <i className="fas fa-hourglass-half mr-1"></i>
-                                  {location.duration}
-                                </span>
-                              )}
+                {/* 해당 날짜의 위치들 */}
+                {dayGroups[day].locations
+                  .sort((a, b) => a.sequence - b.sequence)
+                  .map((location, dayIndex) => {
+                    const globalIndex = locations.findIndex(
+                      (loc) =>
+                        loc.name === location.name &&
+                        loc.day === location.day &&
+                        loc.sequence === location.sequence
+                    );
+                    const isActive = globalIndex === activeIndex;
+
+                    return (
+                      <div key={`${day}-${location.sequence}`} className="mb-4">
+                        {/* Location Item */}
+                        <div
+                          className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 touch-manipulation ${
+                            isActive
+                              ? "bg-blue-50 border-blue-300 shadow-md"
+                              : "bg-white border-gray-200 hover:bg-gray-50"
+                          }`}
+                          onClick={() => onLocationClick(globalIndex)}
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                isActive
+                                  ? "bg-blue-500 text-white"
+                                  : "bg-gray-200 text-gray-600"
+                              }`}
+                            >
+                              {location.sequence}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 truncate">
+                                {location.name}
+                              </h4>
+                              <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                {location.description}
+                              </p>
+                              <div className="flex items-center space-x-4 mt-2">
+                                {location.time && (
+                                  <span className="text-xs text-blue-600 font-medium">
+                                    <i className="fas fa-clock mr-1"></i>
+                                    {location.time}
+                                  </span>
+                                )}
+                                {location.duration && (
+                                  <span className="text-xs text-green-600 font-medium">
+                                    <i className="fas fa-hourglass-half mr-1"></i>
+                                    {location.duration}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Transport to next location (only if not last location of the day) */}
-                      {dayIndex < dayGroups[day].locations.length - 1 && (
-                        <div className="flex items-center justify-center my-2">
-                          <div className="w-px h-6 bg-gray-300"></div>
-                        </div>
-                      )}
-
-                      {/* Transport info */}
-                      {dayIndex < dayGroups[day].locations.length - 1 &&
-                        dayGroups[day].transports.find(
-                          (t) =>
-                            t.start === location.name &&
-                            locations.find(
-                              (l) =>
-                                l.name === t.end &&
-                                l.day === day &&
-                                l.sequence === location.sequence + 1
-                            )
-                        ) && (
-                          <div className="mx-4 my-2 p-2 bg-gray-50 rounded border-l-4 border-blue-400">
-                            {(() => {
-                              const transport = dayGroups[day].transports.find(
-                                (t) =>
-                                  t.start === location.name &&
-                                  locations.find(
-                                    (l) =>
-                                      l.name === t.end &&
-                                      l.day === day &&
-                                      l.sequence === location.sequence + 1
-                                  )
-                              );
-                              return transport ? (
-                                <div className="text-sm text-gray-600">
-                                  <div className="flex items-center space-x-2">
-                                    <i className="fas fa-route text-blue-500"></i>
-                                    <span className="font-medium">
-                                      {transport.transport}
-                                    </span>
-                                    {transport.travelTime && (
-                                      <span className="text-gray-500">
-                                        • {transport.travelTime}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : null;
-                            })()}
+                        {/* Transport to next location (only if not last location of the day) */}
+                        {dayIndex < dayGroups[day].locations.length - 1 && (
+                          <div className="flex items-center justify-center my-2">
+                            <div className="w-px h-6 bg-gray-300"></div>
                           </div>
                         )}
-                    </div>
-                  );
-                })}
-            </div>
-          ))
-        )}
+
+                        {/* Transport info */}
+                        {dayIndex < dayGroups[day].locations.length - 1 &&
+                          dayGroups[day].transports.find(
+                            (t) =>
+                              t.start === location.name &&
+                              locations.find(
+                                (l) =>
+                                  l.name === t.end &&
+                                  l.day === day &&
+                                  l.sequence === location.sequence + 1
+                              )
+                          ) && (
+                            <div className="mx-4 my-2 p-2 bg-gray-50 rounded border-l-4 border-blue-400">
+                              {(() => {
+                                const transport = dayGroups[
+                                  day
+                                ].transports.find(
+                                  (t) =>
+                                    t.start === location.name &&
+                                    locations.find(
+                                      (l) =>
+                                        l.name === t.end &&
+                                        l.day === day &&
+                                        l.sequence === location.sequence + 1
+                                    )
+                                );
+                                return transport ? (
+                                  <div className="text-sm text-gray-600">
+                                    <div className="flex items-center space-x-2">
+                                      <i className="fas fa-route text-blue-500"></i>
+                                      <span className="font-medium">
+                                        {transport.transport}
+                                      </span>
+                                      {transport.travelTime && (
+                                        <span className="text-gray-500">
+                                          • {transport.travelTime}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
+                          )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1538,74 +1556,89 @@ function ChatContainer({
   };
 
   return (
-    <div
-      className={`fixed top-0 left-0 w-80 h-full bg-white border-r border-gray-200 z-[1000] transition-transform duration-300 ease-in-out flex flex-col ${
-        visible ? "translate-x-0" : "-translate-x-full"
-      }`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-        <h3 className="text-lg font-semibold text-gray-800">여행 계획 채팅</h3>
-        <button
+    <>
+      {/* Mobile overlay - only visible on mobile when chat is open */}
+      {visible && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[999] md:hidden"
           onClick={onClose}
-          className="p-1 hover:bg-gray-200 rounded-full transition-colors duration-200"
-        >
-          <i className="fas fa-times text-gray-600"></i>
-        </button>
-      </div>
+        />
+      )}
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            <i className="fas fa-comment-dots text-4xl mb-4 text-gray-300"></i>
-            <p className="text-sm">
-              안녕하세요! 어디로 여행을 가고 싶으신가요?
-            </p>
-            <p className="text-xs mt-2">
-              예: "제주도 하루 코스" 또는 "파리 하루 코스"
-            </p>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <ChatMessageComponent key={message.id} message={message} />
-          ))
-        )}
-        {generating && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-800 rounded-lg rounded-bl-sm px-4 py-2">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
+      <div
+        className={`fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-[1000] transition-transform duration-300 ease-in-out flex flex-col ${
+          visible ? "translate-x-0" : "-translate-x-full"
+        } ${
+          // Mobile: full width, Desktop: fixed width
+          "w-full md:w-80"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+          <h3 className="text-lg font-semibold text-gray-800">
+            여행 계획 채팅
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-200 rounded-full transition-colors duration-200 touch-manipulation"
+          >
+            <i className="fas fa-times text-gray-600 text-lg"></i>
+          </button>
+        </div>
+
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+          {messages.length === 0 ? (
+            <div className="text-center text-gray-500 mt-8">
+              <i className="fas fa-comment-dots text-4xl mb-4 text-gray-300"></i>
+              <p className="text-sm">
+                안녕하세요! 어디로 여행을 가고 싶으신가요?
+              </p>
+              <p className="text-xs mt-2">
+                예: "제주도 하루 코스" 또는 "파리 하루 코스"
+              </p>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <ChatMessageComponent key={message.id} message={message} />
+            ))
+          )}
+          {generating && (
+            <div className="flex justify-start">
+              <div className="bg-gray-100 text-gray-800 rounded-lg rounded-bl-sm px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    계획을 생성하고 있습니다...
+                  </span>
                 </div>
-                <span className="text-xs text-gray-500">
-                  계획을 생성하고 있습니다...
-                </span>
               </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-      {/* Input Area - Fixed at bottom */}
-      <div className="flex-shrink-0">
-        <ChatInput
-          value={inputValue}
-          onChange={setInputValue}
-          onSend={handleSend}
-          disabled={generating}
-        />
+        {/* Input Area - Fixed at bottom */}
+        <div className="flex-shrink-0">
+          <ChatInput
+            value={inputValue}
+            onChange={setInputValue}
+            onSend={handleSend}
+            disabled={generating}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -2135,11 +2168,11 @@ ${currentTransports
       >
         <GoogleMap />
 
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[600px]">
-          <div className="flex items-center bg-white rounded-3xl py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
-            <i className="fas fa-search text-[#717171] mr-3"></i>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[95%] md:w-[90%] max-w-[600px] px-2 md:px-0">
+          <div className="flex items-center bg-white rounded-2xl md:rounded-3xl py-3 md:py-2 px-4 shadow-[0_2px_10px_rgba(0,0,0,0.15)] transition-shadow duration-300 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
+            <i className="fas fa-search text-[#717171] mr-3 text-sm md:text-base"></i>
             <PromptInput
-              placeholder="여행 계획을 만들어보세요... (예: '센트럴 파크 하루 여행', '파리 2박 3일', '제주도 3일 코스')"
+              placeholder="여행 계획을 만들어보세요... (예: '제주도 하루 여행')"
               setPrompt={setPrompt}
               onKeyDown={(e) => {
                 if (e.keyCode === 13 && !e.shiftKey) {
@@ -2165,7 +2198,7 @@ ${currentTransports
         </div>
 
         <div
-          className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-[900px] transition-all duration-300 ease-in-out ${
+          className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[95%] md:w-[90%] max-w-[900px] transition-all duration-300 ease-in-out px-2 md:px-0 ${
             locations.length === 0 ? "hidden" : ""
           }`}
           id="card-carousel"
@@ -2178,7 +2211,7 @@ ${currentTransports
 
           <div className="flex justify-center items-center mt-4">
             <button
-              className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+              className="bg-white border border-[#DDDDDD] rounded-full w-10 h-10 md:w-8 md:h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)] touch-manipulation"
               id="prev-card"
               onClick={() => {
                 // 현재 날짜의 위치들 가져오기
@@ -2267,7 +2300,7 @@ ${currentTransports
               })()}
             </div>
             <button
-              className="bg-white border border-[#DDDDDD] rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]"
+              className="bg-white border border-[#DDDDDD] rounded-full w-10 h-10 md:w-8 md:h-8 flex items-center justify-center cursor-pointer text-[#222222] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)] touch-manipulation"
               id="next-card"
               onClick={() => {
                 // 현재 날짜의 위치들 가져오기
@@ -2323,17 +2356,17 @@ ${currentTransports
         {/* Import button */}
         <button
           id="import-plan"
-          className="absolute bottom-24 left-20 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black"
+          className="absolute bottom-24 left-24 md:left-20 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation"
           onClick={handleFileImport}
           title="여행 일정 불러오기"
         >
-          <i className="fas fa-upload"></i>
+          <i className="fas fa-upload text-base md:text-sm"></i>
         </button>
 
         {/* Export JSON button */}
         <button
           id="export-plan-json-main"
-          className={`absolute bottom-24 left-36 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black ${
+          className={`absolute bottom-24 left-44 md:left-36 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation ${
             locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           onClick={() =>
@@ -2343,13 +2376,13 @@ ${currentTransports
           title="여행 일정 JSON 저장"
           disabled={locations.length === 0}
         >
-          <i className="fas fa-download"></i>
+          <i className="fas fa-download text-base md:text-sm"></i>
         </button>
 
         {/* Export text button */}
         <button
           id="export-plan-text-main"
-          className={`absolute bottom-24 left-52 z-10 bg-white border border-[#DDDDDD] rounded-full w-12 h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black ${
+          className={`absolute bottom-24 left-64 md:left-52 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation ${
             locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           onClick={() =>
@@ -2358,40 +2391,40 @@ ${currentTransports
           title="여행 일정 텍스트 저장"
           disabled={locations.length === 0}
         >
-          <i className="fas fa-file-text"></i>
+          <i className="fas fa-file-text text-base md:text-sm"></i>
         </button>
 
         {/* Chat toggle button */}
         <button
           id="chat-toggle"
-          className={`absolute bottom-8 left-4 z-10 w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-blue-600 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${
+          className={`absolute bottom-8 left-4 z-10 w-14 h-14 md:w-12 md:h-12 bg-blue-500 text-white rounded-full flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-blue-600 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] touch-manipulation ${
             !chatVisible ? "visible" : "invisible"
           }`}
           onClick={() => setChatVisible(true)}
         >
-          <i className="fas fa-comments"></i>
+          <i className="fas fa-comments text-base md:text-sm"></i>
         </button>
       </div>
+
+      {/* Timeline toggle button - moved outside timeline container */}
+      <button
+        id="timeline-toggle"
+        className={`fixed top-1/2 right-0 -translate-y-1/2 w-12 h-12 md:w-10 md:h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer border-0 text-black shadow-md touch-manipulation z-[999] transition-all duration-200 hover:bg-gray-50 ${
+          !timelineVisible && locations.length > 0 ? "visible" : "invisible"
+        }`}
+        onClick={() => {
+          setTimelineVisible(true);
+        }}
+      >
+        <i className="fas fa-calendar-alt text-base md:text-sm"></i>
+      </button>
+
       <div
-        className={`fixed top-0 right-0 w-80 h-full bg-[#fffffffa] backdrop-blur-[10px] z-[1000] transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full bg-[#fffffffa] backdrop-blur-[10px] z-[1000] transition-transform duration-300 ease-in-out w-full md:w-80 ${
           timelineVisible ? "" : "invisible"
         }`}
         id="timeline-container"
       >
-        <button
-          id="timeline-toggle"
-          className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-l-lg flex items-center justify-center cursor-pointer border-0 md:flex text-black ${
-            !timelineVisible && locations.length > 0
-              ? "visible right-0"
-              : "invisible"
-          }`}
-          onClick={() => {
-            setTimelineVisible((prev) => !prev);
-          }}
-        >
-          <i className="fas fa-calendar-alt"></i>
-        </button>
-
         <div className="sticky top-0 p-4 flex justify-between items-center border-b border-[#eeeeee] bg-white z-2">
           <h3 className="text-base font-semibold text-[#333]">
             당신의 여행 계획
@@ -2399,21 +2432,21 @@ ${currentTransports
           <div className="flex gap-2">
             <button
               id="export-plan-json"
-              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
               onClick={() => exportPlanAsJSON(locations, transports, lines)}
             >
               <i className="fas fa-download mr-1"></i> JSON 저장
             </button>
             <button
               id="export-plan"
-              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
               onClick={() => exportDayPlan(locations, lines)}
             >
               <i className="fas fa-file-text mr-1"></i> 텍스트
             </button>
             <button
               id="close-timeline"
-              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-1 px-2 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333]"
+              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
               onClick={() => {
                 setTimelineVisible(false);
               }}
