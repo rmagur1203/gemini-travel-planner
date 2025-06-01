@@ -1653,6 +1653,7 @@ function MapContainer() {
   const [chatVisible, setChatVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [exportDropdownVisible, setExportDropdownVisible] = useState(false);
 
   const [bounds, setBounds] = useState<google.maps.LatLngBounds>(
     new google.maps.LatLngBounds()
@@ -1717,6 +1718,25 @@ function MapContainer() {
       setActiveIndex(0);
     }
   }, [locations, activeIndex]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        !target.closest("#export-plan-main") &&
+        !target.closest("#export-plan-timeline")
+      ) {
+        setExportDropdownVisible(false);
+      }
+    };
+
+    if (exportDropdownVisible) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [exportDropdownVisible]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -2363,36 +2383,60 @@ ${currentTransports
           <i className="fas fa-upload text-base md:text-sm"></i>
         </button>
 
-        {/* Export JSON button */}
-        <button
-          id="export-plan-json-main"
-          className={`absolute bottom-24 left-44 md:left-36 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation ${
-            locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-          onClick={() =>
-            locations.length > 0 &&
-            exportPlanAsJSON(locations, transports, lines)
-          }
-          title="여행 일정 JSON 저장"
-          disabled={locations.length === 0}
-        >
-          <i className="fas fa-download text-base md:text-sm"></i>
-        </button>
+        {/* Export dropdown button */}
+        <div className="absolute bottom-24 left-44 md:left-36 z-10">
+          <button
+            id="export-plan-main"
+            className={`bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation relative ${
+              locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            onClick={() => {
+              if (locations.length > 0) {
+                setExportDropdownVisible(!exportDropdownVisible);
+              }
+            }}
+            title="여행 일정 내보내기"
+            disabled={locations.length === 0}
+          >
+            <i className="fas fa-download text-base md:text-sm"></i>
+            {locations.length > 0 && (
+              <i className="fas fa-chevron-down text-xs absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center"></i>
+            )}
+          </button>
 
-        {/* Export text button */}
-        <button
-          id="export-plan-text-main"
-          className={`absolute bottom-24 left-64 md:left-52 z-10 bg-white border border-[#DDDDDD] rounded-full w-14 h-14 md:w-12 md:h-12 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-200 hover:bg-[#F7F7F7] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-black touch-manipulation ${
-            locations.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-          onClick={() =>
-            locations.length > 0 && exportDayPlan(locations, lines)
-          }
-          title="여행 일정 텍스트 저장"
-          disabled={locations.length === 0}
-        >
-          <i className="fas fa-file-text text-base md:text-sm"></i>
-        </button>
+          {/* Export dropdown menu */}
+          {exportDropdownVisible && locations.length > 0 && (
+            <>
+              {/* Backdrop to close dropdown */}
+              <div
+                className="fixed inset-0 z-0"
+                onClick={() => setExportDropdownVisible(false)}
+              />
+              <div className="absolute bottom-full mb-2 left-0 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] z-20">
+                <button
+                  className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100 touch-manipulation"
+                  onClick={() => {
+                    exportPlanAsJSON(locations, transports, lines);
+                    setExportDropdownVisible(false);
+                  }}
+                >
+                  <i className="fas fa-file-code text-blue-500"></i>
+                  <span>JSON 파일로 저장</span>
+                </button>
+                <button
+                  className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 flex items-center gap-2 touch-manipulation"
+                  onClick={() => {
+                    exportDayPlan(locations, lines);
+                    setExportDropdownVisible(false);
+                  }}
+                >
+                  <i className="fas fa-file-text text-green-500"></i>
+                  <span>텍스트 파일로 저장</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Chat toggle button */}
         <button
@@ -2430,20 +2474,48 @@ ${currentTransports
             당신의 여행 계획
           </h3>
           <div className="flex gap-2">
-            <button
-              id="export-plan-json"
-              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
-              onClick={() => exportPlanAsJSON(locations, transports, lines)}
-            >
-              <i className="fas fa-download mr-1"></i> JSON 저장
-            </button>
-            <button
-              id="export-plan"
-              className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
-              onClick={() => exportDayPlan(locations, lines)}
-            >
-              <i className="fas fa-file-text mr-1"></i> 텍스트
-            </button>
+            <div className="relative">
+              <button
+                id="export-plan-timeline"
+                className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
+                onClick={() => setExportDropdownVisible(!exportDropdownVisible)}
+              >
+                <i className="fas fa-download mr-1"></i> 내보내기
+                <i className="fas fa-chevron-down ml-1 text-xs"></i>
+              </button>
+
+              {/* Timeline export dropdown */}
+              {exportDropdownVisible && (
+                <>
+                  <div
+                    className="fixed inset-0 z-0"
+                    onClick={() => setExportDropdownVisible(false)}
+                  />
+                  <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[140px] z-20">
+                    <button
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100 touch-manipulation"
+                      onClick={() => {
+                        exportPlanAsJSON(locations, transports, lines);
+                        setExportDropdownVisible(false);
+                      }}
+                    >
+                      <i className="fas fa-file-code text-blue-500"></i>
+                      <span>JSON</span>
+                    </button>
+                    <button
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 touch-manipulation"
+                      onClick={() => {
+                        exportDayPlan(locations, lines);
+                        setExportDropdownVisible(false);
+                      }}
+                    >
+                      <i className="fas fa-file-text text-green-500"></i>
+                      <span>텍스트</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               id="close-timeline"
               className="bg-transparent border-none cursor-pointer text-sm text-[#666] flex items-center p-2 px-3 rounded transition-colors duration-200 hover:bg-[#f0f0f0] hover:text-[#333] touch-manipulation"
