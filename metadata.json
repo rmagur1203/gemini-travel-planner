@@ -1,4 +1,6 @@
 {
-  "name": "Maps Planner",
-  "description": "Discover amazing places, plan your perfect day trips, and visualize your adventures on an interactive map."
+  "name": "Gemini Travel Planner",
+  "description": "",
+  "requestFramePermissions": [],
+  "prompt": ""
 }

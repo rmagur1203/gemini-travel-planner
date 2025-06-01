@@ -329,7 +329,10 @@ const systemInstructions = `## System Instructions for an Interactive Map Explor
 
 기억하세요: 구조화된 여행 일정표를 생성하여 각 위치에 시간, 순서, 일차를 포함하고, 위치 간 이동 방법도 명시하세요. 계획 수정 시에는 텍스트 설명과 함께 반드시 모든 위치와 모든 경로에 대해 location과 line 함수를 호출하여 완전한 지도를 업데이트하세요.`;
 
-const ai = new GoogleGenAI({ vertexai: false, apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({
+  // vertexai: false,
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
 async function initMap(mapElement: HTMLElement) {
   // 기본 중심점을 서울로 설정 (안전한 좌표)
@@ -338,7 +341,7 @@ async function initMap(mapElement: HTMLElement) {
   map = new Map(mapElement, {
     center: defaultCenter,
     zoom: 8,
-    mapId: "4504f8b37365c3d0",
+    mapId: process.env.MAP_ID,
     gestureHandling: "greedy",
     zoomControl: false,
     cameraControl: false,
@@ -792,47 +795,115 @@ function getPlaceholderImage(locationName: string): string {
   )}`;
 }
 
-// Exports the current day plan as a simple text file.
+// Exports the current plan as a simple text file.
 function exportDayPlan(locations: LocationInfo[], lines: Line[]) {
   if (!locations.length) return;
-  let content = "# 당신의 하루 계획\n\n";
 
-  const sortedLocations = [...locations].sort(
-    (a, b) =>
-      (a.sequence || Infinity) - (b.sequence || Infinity) ||
-      (a.time || "").localeCompare(b.time || "")
+  // 날짜별로 위치 그룹화
+  const dayGroups = locations.reduce(
+    (groups: { [key: number]: LocationInfo[] }, location) => {
+      const day = location.day;
+      if (!groups[day]) {
+        groups[day] = [];
+      }
+      groups[day].push(location);
+      return groups;
+    },
+    {}
   );
 
-  sortedLocations.forEach((item, index) => {
-    content += `## ${index + 1}. ${item.name}\n`;
-    content += `시간: ${item.time || "유동적"}\n`;
-    if (item.duration) content += `소요 시간: ${item.duration}\n`;
-    content += `\n${item.description}\n\n`;
+  // 날짜 순으로 정렬
+  const sortedDays = Object.keys(dayGroups)
+    .map(Number)
+    .sort((a, b) => a - b);
 
-    if (index < sortedLocations.length - 1) {
-      const nextItem = sortedLocations[index + 1];
-      const connectingLine = lines.find(
-        (line) =>
-          line.name.includes(item.name) || line.name.includes(nextItem.name)
-      );
-      if (connectingLine) {
-        content += `### ${nextItem.name}로 이동\n`;
-        content += `이동 수단: ${
-          connectingLine.transport || "명시되지 않음"
-        }\n`;
-        if (connectingLine.travelTime) {
-          content += `이동 시간: ${connectingLine.travelTime}\n`;
-        }
-        content += `\n`;
+  const totalDays = sortedDays.length;
+  let content = `# 당신의 ${
+    totalDays === 1 ? "하루" : `${totalDays}일`
+  } 여행 계획\n\n`;
+
+  sortedDays.forEach((day) => {
+    const dayLocations = dayGroups[day].sort(
+      (a, b) =>
+        (a.sequence || Infinity) - (b.sequence || Infinity) ||
+        (a.time || "").localeCompare(b.time || "")
+    );
+
+    // 여러 날인 경우 날짜 헤더 추가
+    if (totalDays > 1) {
+      content += `## ${day}일차\n\n`;
+    }
+
+    dayLocations.forEach((item, index) => {
+      const locationNumber =
+        totalDays === 1 ? index + 1 : item.sequence || index + 1;
+      content += `### ${locationNumber}. ${item.name}\n`;
+
+      // 시간 정보
+      if (item.time) {
+        content += `**방문 시간:** ${item.time}\n`;
       }
+      if (item.duration) {
+        content += `**소요 시간:** ${item.duration}\n`;
+      }
+
+      content += `\n${item.description}\n\n`;
+
+      // 다음 위치로의 이동 정보 (같은 날의 마지막 위치가 아닌 경우)
+      if (index < dayLocations.length - 1) {
+        const nextItem = dayLocations[index + 1];
+
+        // 현재 위치에서 다음 위치로의 이동 정보 찾기
+        const connectingLine = lines.find((line) => {
+          // 같은 날짜이고, 현재 위치가 출발지이며, 다음 위치가 도착지인 경우
+          return (
+            line.day === day &&
+            line.name.includes(`${item.name}`) &&
+            line.name.includes(`${nextItem.name}`)
+          );
+        });
+
+        if (connectingLine) {
+          content += `**→ ${nextItem.name}로 이동**\n`;
+          content += `- 이동 수단: ${
+            connectingLine.transport || "명시되지 않음"
+          }\n`;
+          if (connectingLine.travelTime) {
+            content += `- 이동 시간: ${connectingLine.travelTime}\n`;
+          }
+          content += `\n`;
+        }
+      }
+    });
+
+    // 날짜 구분선 (마지막 날이 아닌 경우)
+    if (totalDays > 1 && day < Math.max(...sortedDays)) {
+      content += `---\n\n`;
     }
   });
+
+  // 요약 정보 추가
+  content += `## 여행 요약\n\n`;
+  content += `- **총 일수:** ${totalDays}일\n`;
+  content += `- **총 방문지:** ${locations.length}개\n`;
+
+  if (lines.length > 0) {
+    content += `- **총 이동 구간:** ${lines.length}개\n`;
+  }
 
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "하루계획.txt";
+
+  // 파일명 개선
+  const dateStr = new Date().toISOString().split("T")[0];
+  const fileName =
+    totalDays === 1
+      ? `여행계획_하루_${dateStr}.txt`
+      : `여행계획_${totalDays}일_${dateStr}.txt`;
+  a.download = fileName;
+
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1886,7 +1957,7 @@ ${currentTransports
         });
 
         const response = await ai.models.generateContentStream({
-          model: "gemini-2.5-flash-preview-04-17",
+          model: "gemini-2.5-flash-preview-05-20",
           contents: conversationHistory,
           config: {
             systemInstruction: systemInstructions,
@@ -2064,7 +2135,8 @@ ${currentTransports
           setChatMessages((prev) => [...prev, fallbackMessage]);
         }
       } catch (e) {
-        setErrorMessage(e.message);
+        const error = e as Error;
+        setErrorMessage(error.message);
         console.error("콘텐츠 생성 중 오류:", e);
 
         // Restore previous plan on error
@@ -2102,10 +2174,10 @@ ${currentTransports
         }
 
         // Check if it's an API permission error
-        let userFriendlyMessage = `죄송합니다. 오류가 발생했습니다: ${e.message}`;
+        let userFriendlyMessage = `죄송합니다. 오류가 발생했습니다: ${error.message}`;
 
         if (
-          e.message.includes("API 키에 Directions API 사용 권한이 없습니다")
+          error.message.includes("API 키에 Directions API 사용 권한이 없습니다")
         ) {
           userFriendlyMessage = `
 🚫 **Directions API 권한 필요**
